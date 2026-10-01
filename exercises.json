@@ -1,0 +1,92 @@
+[
+  {
+    "id": "forearm-plank",
+    "name": "Forearm Plank",
+    "focus": ["deep-core"],
+    "pattern": "static",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Ribs down, squeeze glutes, straight line head to heels"
+  },
+  {
+    "id": "bicycle-crunch",
+    "name": "Bicycle Crunch",
+    "focus": ["upper-abs", "obliques"],
+    "pattern": "rotational",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Slow elbow to opposite knee, low back stays down"
+  },
+  {
+    "id": "dead-bug",
+    "name": "Dead Bug",
+    "focus": ["deep-core", "lower-abs"],
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Low back pressed into the floor, move opposite arm and leg"
+  },
+  {
+    "id": "side-plank",
+    "name": "Side Plank",
+    "focus": ["obliques", "deep-core"],
+    "pattern": "static",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "Hips high, stack shoulders over elbow"
+  },
+  {
+    "id": "flutter-kicks",
+    "name": "Flutter Kicks",
+    "focus": ["lower-abs"],
+    "pattern": "dynamic",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Small fast kicks, keep lower back down"
+  },
+  {
+    "id": "mountain-climbers",
+    "name": "Mountain Climbers",
+    "focus": ["full"],
+    "pattern": "dynamic",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Hips level, drive knees to chest"
+  },
+  {
+    "id": "hollow-hold",
+    "name": "Hollow Hold",
+    "focus": ["upper-abs", "lower-abs"],
+    "pattern": "static",
+    "difficulty": 3,
+    "perSide": false,
+    "formCue": "Lower back glued down, arms and legs long"
+  },
+  {
+    "id": "russian-twist",
+    "name": "Russian Twist",
+    "focus": ["obliques"],
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Chest tall, rotate from the ribs, not the arms"
+  },
+  {
+    "id": "bird-dog",
+    "name": "Bird Dog",
+    "focus": ["deep-core"],
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": true,
+    "formCue": "Reach long, keep hips square to the floor"
+  },
+  {
+    "id": "reverse-crunch",
+    "name": "Reverse Crunch",
+    "focus": ["lower-abs"],
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Curl the pelvis up, no swinging"
+  }
+]
