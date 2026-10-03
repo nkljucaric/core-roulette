@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Core Roulette — M0 Spike</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #0b0b0d;
+    color: #f2f2f2;
+    font-family: -apple-system, system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px 16px 48px;
+    box-sizing: border-box;
+  }
+  h1 { font-size: 1.1rem; font-weight: 600; margin: 0 0 4px; text-align: center; }
+  p.sub { color: #999; font-size: 0.85rem; margin: 0 0 8px; text-align: center; max-width: 32em; }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #17171a;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card h2 { font-size: 0.95rem; margin: 0; }
+  .card .result { font-size: 0.85rem; color: #ccc; min-height: 1.2em; }
+  button {
+    font-size: 1rem;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: none;
+    background: #3b82f6;
+    color: white;
+    font-weight: 600;
+  }
+  button:active { background: #2563eb; }
+  .status-ok { color: #4ade80; }
+  .status-bad { color: #f87171; }
+  .timer { font-size: 2rem; font-weight: 700; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>Core Roulette — M0 Spike</h1>
+  <p class="sub">
+    Open this on the iPhone (home-screen or Safari tab), start Spotify playing first,
+    then run each test below. Record results in CLAUDE.md's decision log.
+  </p>
+
+  <div class="card">
+    <h2>1. Beep (Web Audio, ambient session)</h2>
+    <button id="beepBtn">Play beep</button>
+    <div class="result" id="beepResult">Not tested yet.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. Speech ("Next up: bicycle crunches")</h2>
+    <button id="speechBtn">Speak</button>
+    <div class="result" id="speechResult">Not tested yet.</div>
+  </div>
+
+  <div class="card">
+    <h2>3. Screen Wake Lock</h2>
+    <button id="wakeBtn">Enable wake lock</button>
+    <div class="result" id="wakeResult">Off.</div>
+    <div class="timer" id="wakeTimer">00:00</div>
+  </div>
+
+  <div class="card">
+    <h2>Device / support info</h2>
+    <div class="result" id="supportInfo">Loading…</div>
+  </div>
+
+  <script>
+    // --- Support info ---
+    const supportInfo = document.getElementById('supportInfo');
+    supportInfo.innerHTML = [
+      'UA: ' + navigator.userAgent,
+      'Standalone (home screen): ' + (window.navigator.standalone === true),
+      'audioSession API: ' + ('audioSession' in navigator),
+      'speechSynthesis API: ' + ('speechSynthesis' in window),
+      'wakeLock API: ' + ('wakeLock' in navigator),
+    ].join('<br>');
+
+    // --- 1. Beep test ---
+    const beepBtn = document.getElementById('beepBtn');
+    const beepResult = document.getElementById('beepResult');
+    let audioCtx = null;
+
+    beepBtn.addEventListener('click', () => {
+      try {
+        if ('audioSession' in navigator) {
+          try { navigator.audioSession.type = 'ambient'; } catch (e) {}
+        }
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.4, audioCtx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+
+        beepResult.textContent = 'Beep fired. audioSession.type=' +
+          (('audioSession' in navigator) ? navigator.audioSession.type : 'n/a') +
+          '. Did Spotify pause, duck, or keep playing normally?';
+      } catch (err) {
+        beepResult.textContent = 'Error: ' + err.message;
+        beepResult.className = 'result status-bad';
+      }
+    });
+
+    // --- 2. Speech test ---
+    const speechBtn = document.getElementById('speechBtn');
+    const speechResult = document.getElementById('speechResult');
+
+    speechBtn.addEventListener('click', () => {
+      if (!('speechSynthesis' in window)) {
+        speechResult.textContent = 'speechSynthesis not supported.';
+        speechResult.className = 'result status-bad';
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance('Next up: bicycle crunches');
+      utter.onstart = () => {
+        speechResult.textContent = 'Speaking… did Spotify pause, duck, or keep mixing?';
+      };
+      utter.onend = () => {
+        speechResult.textContent += ' (finished)';
+      };
+      speechSynthesis.speak(utter);
+    });
+
+    // --- 3. Wake lock test ---
+    const wakeBtn = document.getElementById('wakeBtn');
+    const wakeResult = document.getElementById('wakeResult');
+    const wakeTimer = document.getElementById('wakeTimer');
+    let wakeLockSentinel = null;
+    let wakeStart = null;
+    let wakeTimerInterval = null;
+
+    function formatElapsed(ms) {
+      const s = Math.floor(ms / 1000);
+      const mm = String(Math.floor(s / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      return mm + ':' + ss;
+    }
+
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) {
+        wakeResult.textContent = 'Wake Lock API not supported on this browser.';
+        wakeResult.className = 'result status-bad';
+        return;
+      }
+      try {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeResult.textContent = 'Active.';
+        wakeResult.className = 'result status-ok';
+        if (!wakeStart) {
+          wakeStart = Date.now();
+          wakeTimerInterval = setInterval(() => {
+            wakeTimer.textContent = formatElapsed(Date.now() - wakeStart);
+          }, 1000);
+        }
+        wakeLockSentinel.addEventListener('release', () => {
+          wakeResult.textContent = 'Released (system or tab change).';
+          wakeResult.className = 'result status-bad';
+        });
+      } catch (err) {
+        wakeResult.textContent = 'Error: ' + err.message;
+        wakeResult.className = 'result status-bad';
+      }
+    }
+
+    wakeBtn.addEventListener('click', requestWakeLock);
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && wakeStart && (!wakeLockSentinel || wakeLockSentinel.released)) {
+        requestWakeLock();
+      }
+    });
+  </script>
+</body>
+</html>
