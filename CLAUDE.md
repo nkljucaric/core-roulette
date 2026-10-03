@@ -54,6 +54,24 @@ workSeconds   optional override of default work interval
 formCue       one short on-screen line (not spoken), e.g. "Ribs down, low back flat"
 ```
 
+## Backlog
+
+Open ideas and planned work live in this repo's **GitHub Issues**, not a local file. Labels:
+
+- Milestone (exactly one per issue): `m0`, `m1`, `m2`, `m3`, `m4`. Milestone order matters — `m0` (the iPhone spike) gates everything else per the working agreement below.
+- `later`: worth keeping, not scheduled into a milestone yet.
+- Type (combine with milestone): `spike`, `feature`, `content`, `polish`, `native-later`.
+
+Use the `backlog-manager` subagent to triage, add ideas, or check what's next — or just run `gh issue list`.
+
+## Starting work on a feature
+
+Before implementing an issue, use the `feature-scoper` subagent to have a short scoping conversation first — part UX lead, part technical architect. It reads the issue and relevant code, surfaces real decision points against this project's hard constraints (iPhone Safari, Spotify coexistence, wake lock, timestamp-based timer), asks a few targeted questions, and records the agreed scope as a comment on the issue. It doesn't write code — that's a separate step once scope is confirmed. Skip it only for genuinely trivial, unambiguous changes.
+
+## Testing
+
+Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
+
 ## Working agreements
 
 - Milestone order matters. **M0 (iPhone audio/wake-lock spike) comes first** because its result decides whether we stay on web or move to Capacitor.

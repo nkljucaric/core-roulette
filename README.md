@@ -18,7 +18,7 @@ A personal web app (PWA) that generates a randomized 10-minute core workout and 
 
 ## Status
 
-Pre-build. See `BACKLOG.md` for milestones and `CLAUDE.md` for project context and decisions.
+M0 (iPhone spike) in progress — deployed and reachable, audio/wake-lock tests pending. See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
 
 ## Running locally
 
@@ -30,7 +30,6 @@ Not set up yet. Milestone 0 (the iPhone audio spike) will establish the dev and 
 /
   README.md
   CLAUDE.md          project brief and decisions for Claude Code
-  BACKLOG.md         milestones and issues (source for GitHub issues)
   exercises.json     exercise library (data, no logic)
   src/
     generator.js     pure functions: build a workout from the library
