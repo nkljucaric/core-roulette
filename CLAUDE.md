@@ -82,4 +82,5 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 
 ## Decisions log
 
-- (add dated entries here as decisions are made, e.g. result of the M0 spike)
+- 2026-10-12: M0 spike passed. Nick tested the deployed page on his iPhone and everything works (#1-#4). Verdict (#5): stay on the web/PWA path; Capacitor (#15) stays in `later`. M1+ is unblocked.
+- (add further dated entries here as decisions are made)
