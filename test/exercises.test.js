@@ -10,7 +10,7 @@ const exercises = JSON.parse(
 );
 
 const FOCUS = ["upper-abs", "lower-abs", "obliques", "deep-core", "full"];
-const POSITION = ["back", "face-down", "other"];
+const POSITION = ["back", "face-down", "side", "standing"];
 const WARMUP = ["eligible", "only"];
 const PATTERN = ["static", "dynamic", "rotational"];
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;

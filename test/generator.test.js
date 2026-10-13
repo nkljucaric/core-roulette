@@ -281,7 +281,7 @@ test("a per-exercise workSeconds in the library overrides the default work lengt
     id,
     name: id,
     focus: ["full"], // "full" overlaps nothing, so focus never constrains order here
-    position: "other",
+    position: "back",
     pattern,
     difficulty: 1,
     perSide: false,
@@ -633,7 +633,9 @@ test("empty filter values mean no filtering", () => {
     );
     for (const id of mainIds(r)) positions.add(byId[id].position);
   }
-  assert.deepEqual([...positions].sort(), ["back", "face-down", "other"]);
+  // Every position that has a main-pool move in the library should show up.
+  const expected = [...new Set(library.filter((e) => e.warmup !== "only").map((e) => e.position))].sort();
+  assert.deepEqual([...positions].sort(), expected);
 });
 
 test("maxDifficulty excludes harder moves", () => {
@@ -717,7 +719,7 @@ test("a move with full focus overlaps with nothing, so it may sit next to any ot
     id,
     name: id,
     focus: ["full"],
-    position: "other",
+    position: "back",
     pattern: ["static", "dynamic", "rotational"][i % 3],
     difficulty: 1,
     perSide: false,
@@ -914,7 +916,7 @@ test("warm-up block spans exactly the warm-up slots and non-circuit blocks have 
 // ---------------------------------------------------------------------------
 
 test("with a narrow filter the workout still reaches the exact duration and warns", () => {
-  // position "other" leaves side-plank, russian-twist, bird-dog in the main pool.
+  // position "side" leaves only side-plank and side-plank-hip-dips in the main pool.
   for (const seed of seeds(20)) {
     const r = generateWorkout(
       library,
@@ -923,13 +925,13 @@ test("with a narrow filter the workout still reaches the exact duration and warn
         workSeconds: 40,
         restSeconds: 20,
         circuit: null,
-        position: { mode: "any", values: ["other"] },
+        position: { mode: "any", values: ["side"] },
       },
       mulberry32(seed)
     );
     assert.equal(r.durationSeconds, 600, `seed ${seed}`);
     assert.ok(r.warnings.length > 0, `seed ${seed}: expected a warning`);
-    for (const id of mainIds(r)) assert.equal(byId[id].position, "other");
+    for (const id of mainIds(r)) assert.equal(byId[id].position, "side");
   }
 });
 
@@ -942,7 +944,7 @@ test("with too few moves, exercises repeat but never back-to-back", () => {
         workSeconds: 40,
         restSeconds: 20,
         circuit: null,
-        position: { mode: "any", values: ["other"] },
+        position: { mode: "any", values: ["side"] },
       },
       mulberry32(seed)
     );

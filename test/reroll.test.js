@@ -43,7 +43,7 @@ const mk = (id, over = {}) => ({
   id,
   name: `Move ${id}`,
   focus: ["full"],
-  position: "other",
+  position: "back",
   pattern: "static",
   difficulty: 1,
   perSide: false,
