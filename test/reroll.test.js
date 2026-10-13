@@ -97,8 +97,10 @@ function mainPool(w, lib) {
 const isWarmCandidate = (e) => e.warmup === "eligible" || e.warmup === "only";
 const usedIds = (w) => new Set(w.slots.map((s) => s.exerciseId));
 const baseWork = (w, lib, id) => libOf(lib)[id].workSeconds ?? w.options.workSeconds;
-const moveCost = (w, lib, id) =>
-  baseWork(w, lib, id) * (libOf(lib)[id].perSide ? 2 : 1) + w.options.restSeconds;
+// A two-sided move costs two work intervals in the main section but only one in the
+// warm-up (the user alternates sides inside a single slot).
+const moveCost = (w, lib, id, section = "main") =>
+  baseWork(w, lib, id) * (libOf(lib)[id].perSide && section === "main" ? 2 : 1) + w.options.restSeconds;
 
 // The final slot's length beyond the base work length of its exercise.
 function leftover(w, lib) {
@@ -149,7 +151,7 @@ function mainSlotKeys(w) {
 
 function warmCost(w, lib) {
   const g = groups(w).find((x) => x.kind === "warmup");
-  return g ? g.ids.reduce((sum, id) => sum + moveCost(w, lib, id), 0) : 0;
+  return g ? g.ids.reduce((sum, id) => sum + moveCost(w, lib, id, "warmup"), 0) : 0;
 }
 
 // Slot-level well-formedness: names, sides, circuit rounds, blocks, timeline.
@@ -173,7 +175,11 @@ function assertSane(w, lib) {
       assert.equal(s.restAfter, s.side === "left" ? 0 : options.restSeconds, `slot ${i} rest`);
       assert.equal(slots[i + 1].startSec, s.endSec + s.restAfter, `slot ${i + 1} start`);
     }
-    if (ex.perSide) {
+    if (ex.perSide && s.section === "warmup") {
+      // Changed: a warm-up two-sided move is one slot where the user alternates sides.
+      assert.equal(s.side, "alternate", `${s.exerciseId} warm-up slot alternates sides`);
+      assert.equal(s.restAfter, i === slots.length - 1 ? 0 : options.restSeconds);
+    } else if (ex.perSide) {
       assert.ok(s.side === "left" || s.side === "right", `${s.exerciseId} needs a side`);
       if (s.side === "left") {
         const next = slots[i + 1];
@@ -434,10 +440,9 @@ test("re-rolling a two-sided move in the real library never leaves a half pair",
     assertSane(res.workout, library); // left/right pairing is checked inside
     const newId = assertOnlyMoveReplaced(c.w, res.workout, idx);
     const rounds = locate(c.w, idx).block.rounds;
-    assert.equal(
-      res.workout.slots.filter((s) => s.exerciseId === newId).length,
-      (byId[newId].perSide ? 2 : 1) * rounds
-    );
+    // A warm-up two-sided move is one slot; a main one is a left and a right slot.
+    const sidesPerRound = byId[newId].perSide && c.w.slots[idx].section === "main" ? 2 : 1;
+    assert.equal(res.workout.slots.filter((s) => s.exerciseId === newId).length, sidesPerRound * rounds);
   }
   assert.ok(pairs > 10, `only ${pairs} two-sided re-rolls seen`);
 });
@@ -686,12 +691,12 @@ test("a warm-up re-roll prefers a replacement whose focus does not overlap the o
     const other = byId[warm.find((id) => id !== oldId)];
     const used = usedIds(c.w);
     // Same-cost candidates always fit the time rules, so they must be available.
+    // In the warm-up cost does not depend on sidedness, only on the work length.
     const sameCost = library.filter(
       (e) =>
         isWarmCandidate(e) &&
         e.difficulty === 1 &&
         !used.has(e.id) &&
-        Boolean(e.perSide) === Boolean(old.perSide) &&
         e.workSeconds === old.workSeconds
     );
     const friendly = sameCost.filter((e) => !focusOverlap(e.focus, other.focus));
@@ -786,7 +791,9 @@ test("with the warm-up outside the total, the duration changes by exactly the wa
   assert.ok(checked > 5, `only ${checked} uncounted warm-up re-rolls changed`);
 });
 
-test("swapping a normal warm-up move for a two-sided one outside the total adds exactly one work interval, and the reverse removes it", () => {
+// Changed for "warm-up two-sided moves alternate sides in one slot": this used to
+// assert that the swap added (or removed) one work interval and one slot.
+test("swapping a normal warm-up move for a two-sided one outside the total changes neither the duration nor the slot count, and the reverse too", () => {
   const warmOut = { ...SHORT, warmup: { enabled: true, countsInTotal: false } };
   const mains = seeds(5).map((i) => mk(`m${i}`, { pattern: PATTERNS[i % 3] }));
 
@@ -797,8 +804,10 @@ test("swapping a normal warm-up move for a two-sided one outside the total adds 
   for (const idx of [0, 1]) {
     const res = rerollSlot(lib, w, idx, mulberry32(2));
     assert.equal(res.changed, true);
-    assert.equal(res.workout.durationSeconds, w.durationSeconds + 40);
-    assert.equal(res.workout.slots.length, w.slots.length + 1);
+    assert.equal(res.workout.slots[idx].exerciseId, "wp");
+    assert.equal(res.workout.slots[idx].side, "alternate");
+    assert.equal(res.workout.durationSeconds, w.durationSeconds);
+    assert.equal(res.workout.slots.length, w.slots.length);
     assert.deepEqual(mainSlotKeys(res.workout), mainSlotKeys(w));
     assertSane(res.workout, lib);
   }
@@ -808,12 +817,181 @@ test("swapping a normal warm-up move for a two-sided one outside the total adds 
   const wp = generateWorkout(libP0, warmOut, mulberry32(1));
   const libP = [...libP0, mk("wn", { warmup: "eligible", pattern: "rotational" })];
   const idx = wp.slots.findIndex((s) => s.exerciseId === "w1");
+  assert.equal(wp.slots[idx].side, "alternate", "premise");
   const res = rerollSlot(libP, wp, idx, mulberry32(2));
   assert.equal(res.changed, true);
-  assert.equal(res.workout.durationSeconds, wp.durationSeconds - 40);
-  assert.equal(res.workout.slots.length, wp.slots.length - 1);
+  assert.equal(res.workout.slots[idx].exerciseId, "wn");
+  assert.equal(res.workout.slots[idx].side, null);
+  assert.equal(res.workout.durationSeconds, wp.durationSeconds);
+  assert.equal(res.workout.slots.length, wp.slots.length);
   assert.deepEqual(mainSlotKeys(res.workout), mainSlotKeys(wp));
   assertSane(res.workout, libP);
+});
+
+const mainsN = (n) => seeds(n).map((i) => mk(`m${i}`, { pattern: PATTERNS[i % 3] }));
+
+test("swapping a two-sided warm-up move for a one-sided one inside the total keeps the total exact and the leftover unchanged", () => {
+  const lib0 = [mk("w1", { warmup: "eligible", perSide: true }), mk("w2", { warmup: "eligible", pattern: "dynamic" }), ...mainsN(5)];
+  const lib = [...lib0, mk("wn", { warmup: "eligible", pattern: "rotational" })];
+  for (const total of [375, 390, 450]) {
+    const w = generateWorkout(lib0, { ...BASE, totalSeconds: total, warmup: { enabled: true } }, mulberry32(1));
+    const idx = w.slots.findIndex((s) => s.exerciseId === "w1");
+    assert.equal(w.slots[idx].side, "alternate", "premise");
+    const res = rerollSlot(lib, w, idx, mulberry32(2));
+    assert.equal(res.changed, true, `total ${total}`);
+    assert.equal(res.workout.slots[idx].exerciseId, "wn");
+    assert.equal(res.workout.slots[idx].side, null);
+    assert.equal(res.workout.slots.length, w.slots.length);
+    assert.equal(res.workout.durationSeconds, total);
+    assert.equal(leftover(res.workout, lib), leftover(w, lib), `total ${total}`);
+    assert.deepEqual(mainSlotKeys(res.workout), mainSlotKeys(w));
+    assertSane(res.workout, lib);
+  }
+});
+
+test("swapping a one-sided warm-up move for a two-sided one inside the total keeps the total exact and the leftover unchanged", () => {
+  const lib0 = [mk("w1", { warmup: "eligible" }), mk("w2", { warmup: "eligible", pattern: "dynamic" }), ...mainsN(5)];
+  const lib = [...lib0, mk("wp", { warmup: "eligible", perSide: true, pattern: "rotational" })];
+  for (const total of [375, 390, 450]) {
+    const w = generateWorkout(lib0, { ...BASE, totalSeconds: total, warmup: { enabled: true } }, mulberry32(1));
+    for (const idx of [0, 1]) {
+      const res = rerollSlot(lib, w, idx, mulberry32(2));
+      assert.equal(res.changed, true, `total ${total} slot ${idx}`);
+      assert.equal(res.workout.slots[idx].exerciseId, "wp");
+      assert.equal(res.workout.slots[idx].side, "alternate");
+      assert.equal(res.workout.slots.length, w.slots.length);
+      assert.equal(res.workout.durationSeconds, total);
+      assert.equal(leftover(res.workout, lib), leftover(w, lib), `total ${total} slot ${idx}`);
+      assertSane(res.workout, lib);
+    }
+  }
+});
+
+test("a one-sided warm-up move can be swapped for a two-sided one even with zero leftover, because the warm-up cost does not grow", () => {
+  const lib0 = [mk("w1", { warmup: "eligible" }), mk("w2", { warmup: "eligible", pattern: "dynamic" }), ...mainsN(5)];
+  const lib = [...lib0, mk("wp", { warmup: "eligible", perSide: true, pattern: "rotational" })];
+  // warm-up 120s + four 60s moves minus the last rest = 340, so 340 total leaves nothing over.
+  const w = generateWorkout(lib0, { ...BASE, totalSeconds: 340, warmup: { enabled: true } }, mulberry32(1));
+  assert.equal(leftover(w, lib), 0, "premise");
+  const res = rerollSlot(lib, w, 0, mulberry32(1));
+  assert.equal(res.changed, true);
+  assert.equal(res.workout.slots[0].side, "alternate");
+  assert.equal(res.workout.durationSeconds, 340);
+  assert.equal(leftover(res.workout, lib), 0);
+});
+
+test("a warm-up swap is still limited to one work interval of leftover change: a two-sided candidate costs one window, not two", () => {
+  // w1/w2 cost 60 each. A two-sided candidate with a work override of W costs W + 20,
+  // so the leftover shrinks by W - 40: W 80 is exactly one work interval (allowed),
+  // W 90 is more than one (rejected although the leftover would not go negative).
+  // Under the old doubled cost, W 80 would have cost 180.
+  const lib0 = [mk("w1", { warmup: "eligible" }), mk("w2", { warmup: "eligible", pattern: "dynamic" }), ...mainsN(5)];
+  const w = generateWorkout(lib0, { ...BASE, totalSeconds: 390, warmup: { enabled: true } }, mulberry32(1));
+  assert.equal(leftover(w, lib0), 50, "premise");
+  const ok = [...lib0, mk("wide", { warmup: "eligible", perSide: true, workSeconds: 80, pattern: "rotational" })];
+  const res = rerollSlot(ok, w, 0, mulberry32(1));
+  assert.equal(res.changed, true);
+  assert.equal(res.workout.slots[0].exerciseId, "wide");
+  assert.equal(res.workout.slots[0].workSeconds, 80);
+  assert.equal(res.workout.slots[0].side, "alternate");
+  assert.equal(res.workout.durationSeconds, 390);
+  assert.equal(leftover(res.workout, ok), 10);
+  const tooWide = [...lib0, mk("wider", { warmup: "eligible", perSide: true, workSeconds: 90, pattern: "rotational" })];
+  const no = rerollSlot(tooWide, w, 0, mulberry32(1));
+  assert.equal(no.changed, false);
+  assert.equal(no.reason, "no-alternative");
+  assert.equal(no.workout, w);
+});
+
+test("re-rolling either warm-up slot of a two-sided-only warm-up replaces that whole move with another two-sided one", () => {
+  const warmups = ["wa", "wb", "wc", "wd"].map((id, i) => mk(id, { warmup: "only", perSide: true, pattern: PATTERNS[i % 3] }));
+  const lib = [...warmups, ...mainsN(8)];
+  for (const total of [BASE.totalSeconds, 500]) {
+    const w = generateWorkout(lib, { ...BASE, totalSeconds: total, warmup: { enabled: true } }, mulberry32(3));
+    const warm = w.slots.filter((s) => s.section === "warmup");
+    assert.deepEqual(warm.map((s) => s.side), ["alternate", "alternate"], "premise");
+    for (const idx of [0, 1]) {
+      const res = rerollSlot(lib, w, idx, mulberry32(idx + 1));
+      assert.equal(res.changed, true, `slot ${idx}`);
+      const newId = assertOnlyMoveReplaced(w, res.workout, idx);
+      assert.ok(["wa", "wb", "wc", "wd"].includes(newId));
+      assert.ok(!usedIds(w).has(newId));
+      const after = res.workout.slots.filter((s) => s.section === "warmup");
+      assert.equal(after.length, 2, "still two warm-up slots");
+      assert.deepEqual(after.map((s) => s.side), ["alternate", "alternate"]);
+      assert.equal(after[idx].exerciseId, newId);
+      assert.equal(after[1 - idx].exerciseId, warm[1 - idx].exerciseId);
+      assert.equal(res.workout.durationSeconds, total);
+      assert.equal(leftover(res.workout, lib), leftover(w, lib));
+      assertSane(res.workout, lib);
+    }
+  }
+});
+
+test("a warm-up alternate slot counts as one whole move when a later slot is re-rolled (index mapping)", () => {
+  // Warm-up: two alternate slots at index 0 and 1; main follows. Re-rolling slot 1
+  // must replace the second warm-up move only, and re-rolling each main slot must
+  // replace the matching main move, not one shifted by the warm-up slots.
+  const warmups = ["wa", "wb", "wc"].map((id, i) => mk(id, { warmup: "only", perSide: true, pattern: PATTERNS[i % 3] }));
+  const lib = [...warmups, ...mainsN(8)];
+  const w = generateWorkout(lib, { ...BASE, warmup: { enabled: true } }, mulberry32(5));
+  const before = groups(w);
+  assert.equal(before[0].kind, "warmup");
+  assert.equal(before[0].ids.length, 2, "premise: two warm-up moves");
+  for (let idx = 0; idx < w.slots.length; idx++) {
+    const res = rerollSlot(lib, w, idx, mulberry32(idx + 1));
+    if (!res.changed) continue;
+    const newId = assertOnlyMoveReplaced(w, res.workout, idx); // checks which move, by position
+    const sec = w.slots[idx].section;
+    assert.ok(sec === "warmup" ? warmups.some((e) => e.id === newId) : !warmups.some((e) => e.id === newId));
+    assertSane(res.workout, lib);
+  }
+});
+
+test("re-rolling a main two-sided move in a workout with a two-sided warm-up replaces both sides and leaves the warm-up alone", () => {
+  const mainsP = seeds(8).map((i) => mk(`p${i}`, { perSide: true, pattern: PATTERNS[i % 3] }));
+  const warmups = [mk("wa", { warmup: "only", perSide: true }), mk("wb", { warmup: "only", perSide: true, pattern: "dynamic" })];
+  const lib = [...warmups, ...mainsP];
+  const w = generateWorkout(lib, { ...BASE, totalSeconds: 600, warmup: { enabled: true } }, mulberry32(2));
+  const warmBefore = w.slots.filter((s) => s.section === "warmup").map((s) => [s.exerciseId, s.side, s.workSeconds, s.restAfter]);
+  let rerolled = 0;
+  for (const s of w.slots.filter((x) => x.section === "main")) {
+    const res = rerollSlot(lib, w, s.index, mulberry32(s.index + 1));
+    assert.equal(res.changed, true, `slot ${s.index}`);
+    rerolled++;
+    const newId = assertOnlyMoveReplaced(w, res.workout, s.index);
+    const pairStart = s.side === "right" ? s.index - 1 : s.index;
+    const [left, right] = res.workout.slots.slice(pairStart, pairStart + 2);
+    assert.deepEqual([left.exerciseId, left.side], [newId, "left"]);
+    assert.deepEqual([right.exerciseId, right.side], [newId, "right"]);
+    assert.equal(left.restAfter, 0);
+    assert.equal(
+      res.workout.slots.filter((x) => x.section === "warmup").map((x) => [x.exerciseId, x.side, x.workSeconds, x.restAfter]).join("|"),
+      warmBefore.join("|")
+    );
+    assert.equal(res.workout.durationSeconds, 600);
+    assertSane(res.workout, lib);
+  }
+  assert.ok(rerolled >= 6, `only ${rerolled} main slots`);
+});
+
+test("in the real library a warm-up re-roll keeps two warm-up slots and the leftover whatever the sidedness of the old and new move", () => {
+  let crossed = 0;
+  let checked = 0;
+  for (const { c, idx, res, section } of changedRerolls()) {
+    if (section !== "warmup") continue;
+    checked++;
+    const newId = assertOnlyMoveReplaced(c.w, res.workout, idx);
+    const oldId = c.w.slots[idx].exerciseId;
+    if (Boolean(byId[newId].perSide) !== Boolean(byId[oldId].perSide)) crossed++;
+    assert.equal(res.workout.slots.filter((s) => s.section === "warmup").length, 2);
+    assert.equal(res.workout.slots.length, c.w.slots.length, "warm-up swaps never change the slot count");
+    if (byId[newId].workSeconds === byId[oldId].workSeconds) {
+      assert.equal(leftover(res.workout, library), leftover(c.w, library));
+    }
+  }
+  assert.ok(checked > 20, `only ${checked} warm-up re-rolls changed`);
+  assert.ok(crossed > 0, "premise: some warm-up swap changed sidedness (bird-dog, reach-through)");
 });
 
 // ---------------------------------------------------------------------------
@@ -914,7 +1092,7 @@ test("the final slot's leftover shifts by exactly the cost difference, never goe
       continue;
     }
     checked++;
-    const delta = block.rounds * (moveCost(c.w, library, oldId) - moveCost(res.workout, library, newId));
+    const delta = block.rounds * (moveCost(c.w, library, oldId, section) - moveCost(res.workout, library, newId, section));
     assert.equal(after - before, delta);
     assert.ok(Math.abs(after - before) <= c.w.options.workSeconds, `leftover moved by ${after - before}`);
   }
@@ -977,25 +1155,6 @@ test("a swap that would grow the leftover by more than one work interval is not 
   const ok = rerollSlot([...lib0, mk("spare", { workSeconds: 40, pattern: "static" })], w, idx, mulberry32(1));
   assert.equal(ok.changed, true);
   assert.equal(leftover(ok.workout, [...lib0, mk("spare", { workSeconds: 40, pattern: "static" })]), 50);
-});
-
-test("a normal move is only swapped for a two-sided one when the warm-up swap leaves enough leftover, with the warm-up inside the total", () => {
-  const mains = seeds(5).map((i) => mk(`m${i}`, { pattern: PATTERNS[i % 3] }));
-  const lib0 = [mk("w1", { warmup: "eligible" }), mk("w2", { warmup: "eligible", pattern: "dynamic" }), ...mains];
-  const lib = [...lib0, mk("wp", { warmup: "eligible", perSide: true, pattern: "rotational" })];
-  // warm-up 120s + four 60s moves minus the last rest = 340; leftover = total - 340.
-  const enough = generateWorkout(lib0, { ...BASE, totalSeconds: 390, warmup: { enabled: true } }, mulberry32(1));
-  assert.equal(leftover(enough, lib), 50, "premise");
-  const res = rerollSlot(lib, enough, 0, mulberry32(1));
-  assert.equal(res.changed, true);
-  assert.equal(res.workout.durationSeconds, 390);
-  assert.equal(leftover(res.workout, lib), 10);
-
-  const short = generateWorkout(lib0, { ...BASE, totalSeconds: 375, warmup: { enabled: true } }, mulberry32(1));
-  assert.ok(leftover(short, lib) < 40, "premise");
-  const no = rerollSlot(lib, short, 0, mulberry32(1));
-  assert.equal(no.changed, false);
-  assert.equal(no.workout, short);
 });
 
 // ---------------------------------------------------------------------------

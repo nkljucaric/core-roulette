@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { generateWorkout } from "../src/generator.js";
+import { generateWorkout, buildTimeline, costOf } from "../src/generator.js";
 
 // Logic-layer tests for generateWorkout (issue #7). The contract is the scope
 // comment on #7: generateWorkout(library, options = {}, rng = Math.random)
@@ -416,20 +416,22 @@ test("warm-up enabled puts two warm-up moves first, then the main section", () =
   }
 });
 
-test("a perSide warm-up move counts as one move but two slots", () => {
+// Changed for "warm-up two-sided moves alternate sides in one slot": this used to
+// assert that a perSide warm-up move was two slots (left, right).
+test("a perSide warm-up move counts as one move and one slot, with side alternate", () => {
   let sawPerSide = false;
   for (const seed of seeds(60)) {
     const r = generateWorkout(library, WARM, mulberry32(seed));
     const warm = r.slots.filter((s) => s.section === "warmup");
     const moves = new Set(warm.map((s) => s.exerciseId)).size;
-    const expectedSlots = [...new Set(warm.map((s) => s.exerciseId))]
-      .map((id) => (byId[id].perSide ? 2 : 1))
-      .reduce((a, b) => a + b, 0);
     assert.equal(moves, 2);
-    assert.equal(warm.length, expectedSlots);
-    if (warm.some((s) => s.side)) sawPerSide = true;
+    assert.equal(warm.length, 2, `seed ${seed}: one slot per warm-up move`);
+    for (const s of warm) {
+      assert.equal(s.side, byId[s.exerciseId].perSide ? "alternate" : null, `${s.exerciseId} seed ${seed}`);
+      if (s.side === "alternate") sawPerSide = true;
+    }
   }
-  assert.ok(sawPerSide, "bird-dog never drawn as a warm-up across 60 seeds");
+  assert.ok(sawPerSide, "a perSide warm-up move (bird-dog) never drawn across 60 seeds");
 });
 
 test("warm-up moves are drawn only from warmup eligible/only entries at difficulty 1", () => {
@@ -534,6 +536,431 @@ test("warm-up uses the normal work length", () => {
   const r = generateWorkout(library, WARM, mulberry32(5));
   for (const s of r.slots.filter((x) => x.section === "warmup")) {
     assert.equal(s.workSeconds, 40);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Warm-up two-sided moves: one slot, the user alternates sides on their own
+// ---------------------------------------------------------------------------
+
+// A minimal valid exercise; "full" focus overlaps with nothing, so synthetic
+// libraries are never constrained by the focus rule.
+const mk = (id, over = {}) => ({
+  id,
+  name: `Move ${id}`,
+  focus: ["full"],
+  position: "back",
+  pattern: "static",
+  difficulty: 1,
+  perSide: false,
+  formCue: "cue",
+  ...over,
+});
+const PATTERNS = ["static", "dynamic", "rotational"];
+
+// Twelve main moves (every third one two-sided) plus the warm-up moves, which
+// are warm-up-only so the main pool never touches them.
+const mainsLib = Array.from({ length: 12 }, (_, i) =>
+  mk(`m${i + 1}`, { pattern: PATTERNS[i % 3], perSide: i % 3 === 0 })
+);
+const twoSidedWarmups = [
+  mk("wa", { warmup: "only", perSide: true }),
+  mk("wb", { warmup: "only", perSide: true, pattern: "dynamic" }),
+];
+// The warm-up pool is exactly two two-sided moves, so a warm-up is always two-sided.
+const SYN = [...twoSidedWarmups, ...mainsLib];
+
+const warmSlots = (r) => r.slots.filter((s) => s.section === "warmup");
+const mainSlots = (r) => r.slots.filter((s) => s.section === "main");
+
+// buildTimeline specs -------------------------------------------------------
+
+const spec = (section, moves, over = {}) => ({
+  id: section === "warmup" ? "warmup" : "straight-1",
+  kind: section === "warmup" ? "warmup" : "straight",
+  section,
+  rounds: 1,
+  moves,
+  ...over,
+});
+const TL = { work: 40, rest: 20, target: 1000 };
+
+test("buildTimeline: a perSide warm-up move becomes exactly one slot with side alternate", () => {
+  const { slots } = buildTimeline(
+    [spec("warmup", [mk("wa", { perSide: true })]), spec("main", [mk("m1")])],
+    TL
+  );
+  const warm = slots.filter((s) => s.section === "warmup");
+  assert.equal(warm.length, 1);
+  assert.equal(warm[0].exerciseId, "wa");
+  assert.equal(warm[0].side, "alternate");
+});
+
+test("buildTimeline: a perSide warm-up slot is one work interval long, not doubled, with the normal rest after it", () => {
+  const { slots } = buildTimeline(
+    [spec("warmup", [mk("wa", { perSide: true })]), spec("main", [mk("m1")])],
+    TL
+  );
+  assert.equal(slots[0].workSeconds, 40);
+  assert.equal(slots[0].restAfter, 20);
+  assert.equal(slots[0].startSec, 0);
+  assert.equal(slots[0].endSec, 40);
+  assert.equal(slots[1].startSec, 60, "the next slot starts after one work interval plus one rest");
+});
+
+test("buildTimeline: a perSide warm-up move with its own workSeconds uses that value once, not doubled", () => {
+  const { slots } = buildTimeline(
+    [spec("warmup", [mk("wa", { perSide: true, workSeconds: 25 })]), spec("main", [mk("m1")])],
+    TL
+  );
+  assert.equal(slots[0].side, "alternate");
+  assert.equal(slots[0].workSeconds, 25);
+  assert.equal(slots[0].endSec, 25);
+  assert.equal(slots[1].startSec, 45);
+});
+
+test("buildTimeline: a non-perSide warm-up move still has side null and one slot", () => {
+  const { slots } = buildTimeline(
+    [spec("warmup", [mk("w1")]), spec("main", [mk("m1")])],
+    TL
+  );
+  const warm = slots.filter((s) => s.section === "warmup");
+  assert.equal(warm.length, 1);
+  assert.equal(warm[0].side, null);
+  assert.equal(warm[0].workSeconds, 40);
+});
+
+test("buildTimeline: a warm-up of two two-sided moves is two slots, each followed by the normal rest", () => {
+  const { slots, blocks } = buildTimeline(
+    [spec("warmup", [mk("wa", { perSide: true }), mk("wb", { perSide: true })]), spec("main", [mk("m1")])],
+    TL
+  );
+  assert.deepEqual(
+    slots.map((s) => [s.exerciseId, s.side, s.startSec, s.endSec, s.restAfter]),
+    [
+      ["wa", "alternate", 0, 40, 20],
+      ["wb", "alternate", 60, 100, 20],
+      ["m1", null, 120, 1000, 0],
+    ]
+  );
+  assert.deepEqual(blocks[0], { id: "warmup", kind: "warmup", rounds: 1, firstSlot: 0, lastSlot: 1 });
+});
+
+test("buildTimeline: mixed one-sided and two-sided warm-up moves each take one slot", () => {
+  const { slots } = buildTimeline(
+    [spec("warmup", [mk("w1"), mk("wa", { perSide: true })]), spec("main", [mk("m1")])],
+    TL
+  );
+  assert.deepEqual(
+    slots.filter((s) => s.section === "warmup").map((s) => [s.exerciseId, s.side]),
+    [["w1", null], ["wa", "alternate"]]
+  );
+});
+
+test("buildTimeline: a main-section perSide move is still two full slots, left then right, with no rest between", () => {
+  const { slots } = buildTimeline([spec("main", [mk("p", { perSide: true }), mk("m1")])], TL);
+  assert.deepEqual(
+    slots.map((s) => [s.exerciseId, s.side, s.workSeconds, s.restAfter]),
+    [
+      ["p", "left", 40, 0],
+      ["p", "right", 40, 20],
+      ["m1", null, 900, 0], // 40 + the 860s left of the 1000s target
+    ]
+  );
+});
+
+test("buildTimeline: a circuit perSide move keeps left and right in every round", () => {
+  const circuit = spec("main", [mk("p", { perSide: true }), mk("m1")], { id: "circuit", kind: "circuit", rounds: 2 });
+  const { slots } = buildTimeline([circuit], TL);
+  assert.deepEqual(
+    slots.map((s) => [s.round, s.exerciseId, s.side]),
+    [
+      [1, "p", "left"], [1, "p", "right"], [1, "m1", null],
+      [2, "p", "left"], [2, "p", "right"], [2, "m1", null],
+    ]
+  );
+  assert.ok(slots.every((s) => s.side !== "alternate"));
+});
+
+test("buildTimeline: only the warm-up collapses a perSide move; the same move in main is still two slots", () => {
+  const p = mk("p", { perSide: true });
+  const { slots } = buildTimeline([spec("warmup", [p]), spec("main", [mk("q", { perSide: true })])], TL);
+  assert.deepEqual(
+    slots.map((s) => [s.section, s.exerciseId, s.side]),
+    [["warmup", "p", "alternate"], ["main", "q", "left"], ["main", "q", "right"]]
+  );
+});
+
+test("buildTimeline: the last slot overall has no rest and absorbs leftover time even when it is a warm-up slot", () => {
+  const r = buildTimeline([spec("warmup", [mk("wa", { perSide: true })])], { work: 40, rest: 20, target: 100 });
+  assert.equal(r.slots.length, 1);
+  assert.equal(r.slots[0].side, "alternate");
+  assert.equal(r.slots[0].restAfter, 0);
+  assert.equal(r.slots[0].workSeconds, 100);
+  assert.equal(r.durationSeconds, 100);
+  assert.equal(r.overflow, false);
+});
+
+test("buildTimeline: the total is exact with a two-sided warm-up in front, and a single-window warm-up is what gets planned", () => {
+  // warm-up 2 x (40 + 20) = 120, then main m1 absorbs the rest of the 400s target.
+  const r = buildTimeline(
+    [spec("warmup", [mk("wa", { perSide: true }), mk("wb", { perSide: true })]), spec("main", [mk("m1")])],
+    { work: 40, rest: 20, target: 400 }
+  );
+  assert.equal(r.durationSeconds, 400);
+  assert.equal(r.slots[r.slots.length - 1].endSec, 400);
+  assert.equal(r.slots[2].startSec, 120);
+  assert.equal(r.slots[2].workSeconds, 280);
+});
+
+test("buildTimeline: overflow is judged on the single-window warm-up cost", () => {
+  const specs = [spec("warmup", [mk("wa", { perSide: true }), mk("wb", { perSide: true })]), spec("main", [mk("m1")])];
+  // 40+20 + 40+20 + 40 = 160 planned: a 160s target just fits, 159s overflows.
+  assert.equal(buildTimeline(specs, { work: 40, rest: 20, target: 160 }).overflow, false);
+  assert.equal(buildTimeline(specs, { work: 40, rest: 20, target: 159 }).overflow, true);
+});
+
+// costOf ---------------------------------------------------------------------
+
+test("costOf: three arguments behave as before (a two-sided move costs two work intervals plus rest)", () => {
+  assert.equal(costOf(mk("p", { perSide: true }), 40, 20), 100);
+  assert.equal(costOf(mk("n"), 40, 20), 60);
+});
+
+test("costOf: main section is the default and costs a two-sided move 2 * work + rest", () => {
+  const p = mk("p", { perSide: true });
+  assert.equal(costOf(p, 40, 20, "main"), 100);
+  assert.equal(costOf(p, 40, 20, "main"), costOf(p, 40, 20));
+});
+
+test("costOf: a two-sided warm-up move costs one work interval plus rest", () => {
+  assert.equal(costOf(mk("wa", { perSide: true }), 40, 20, "warmup"), 60);
+});
+
+test("costOf: a one-sided move costs work + rest in both sections", () => {
+  const n = mk("n");
+  assert.equal(costOf(n, 40, 20, "warmup"), 60);
+  assert.equal(costOf(n, 40, 20, "main"), 60);
+});
+
+test("costOf: a workSeconds override replaces the work length in both sections", () => {
+  const p = mk("p", { perSide: true, workSeconds: 25 });
+  assert.equal(costOf(p, 40, 20, "warmup"), 45);
+  assert.equal(costOf(p, 40, 20, "main"), 70);
+  assert.equal(costOf(mk("n", { workSeconds: 25 }), 40, 20, "warmup"), 45);
+});
+
+test("costOf: a zero rest is allowed", () => {
+  assert.equal(costOf(mk("wa", { perSide: true }), 40, 0, "warmup"), 40);
+  assert.equal(costOf(mk("p", { perSide: true }), 40, 0, "main"), 80);
+});
+
+// generateWorkout ------------------------------------------------------------
+
+test("generateWorkout: a two-sided warm-up move never gets left or right slots (real library)", () => {
+  for (const seed of seeds(60)) {
+    const r = generateWorkout(library, WARM, mulberry32(seed));
+    for (const s of warmSlots(r)) {
+      assert.ok(s.side !== "left" && s.side !== "right", `seed ${seed}: ${s.exerciseId} is ${s.side}`);
+    }
+  }
+});
+
+test("generateWorkout: a warm-up whose pool is two two-sided moves gives exactly two slots, both alternate", () => {
+  for (const seed of seeds(30)) {
+    const r = generateWorkout(SYN, WARM, mulberry32(seed));
+    const warm = warmSlots(r);
+    assert.equal(warm.length, 2, `seed ${seed}`);
+    assert.deepEqual(warm.map((s) => s.side), ["alternate", "alternate"], `seed ${seed}`);
+    assert.deepEqual(warm.map((s) => s.exerciseId).sort(), ["wa", "wb"], `seed ${seed}`);
+  }
+});
+
+test("generateWorkout: each warm-up move appears in exactly one slot", () => {
+  for (const lib of [library, SYN]) {
+    for (const seed of seeds(30)) {
+      const ids = warmSlots(generateWorkout(lib, WARM, mulberry32(seed))).map((s) => s.exerciseId);
+      assert.equal(new Set(ids).size, ids.length, `seed ${seed}: ${ids}`);
+      assert.equal(ids.length, 2, `seed ${seed}`);
+    }
+  }
+});
+
+test("generateWorkout: the warm-up block spans exactly the two warm-up slots", () => {
+  for (const seed of seeds(20)) {
+    const r = generateWorkout(SYN, WARM, mulberry32(seed));
+    const block = r.blocks.find((b) => b.kind === "warmup");
+    assert.deepEqual(block, { id: "warmup", kind: "warmup", rounds: 1, firstSlot: 0, lastSlot: 1 });
+  }
+});
+
+test("generateWorkout: a two-sided warm-up slot is one work interval long, followed by a normal rest", () => {
+  const r = generateWorkout(SYN, WARM, mulberry32(3));
+  const [a, b] = warmSlots(r);
+  assert.equal(a.workSeconds, 40);
+  assert.equal(a.restAfter, 20);
+  assert.equal(b.startSec, 60);
+  assert.equal(b.workSeconds, 40);
+  assert.equal(b.restAfter, 20);
+  assert.equal(mainSlots(r)[0].startSec, 120);
+});
+
+test("generateWorkout: a two-sided warm-up move with a workSeconds override uses it once", () => {
+  const lib = [
+    mk("wa", { warmup: "only", perSide: true, workSeconds: 30 }),
+    mk("wb", { warmup: "only", perSide: true, workSeconds: 25, pattern: "dynamic" }),
+    ...mainsLib,
+  ];
+  for (const seed of seeds(10)) {
+    const r = generateWorkout(lib, WARM, mulberry32(seed));
+    const [a, b] = warmSlots(r);
+    assert.equal(a.workSeconds, a.exerciseId === "wa" ? 30 : 25);
+    assert.equal(b.workSeconds, b.exerciseId === "wa" ? 30 : 25);
+    assert.equal(r.durationSeconds, 600, `seed ${seed}`);
+  }
+});
+
+test("generateWorkout: a warm-up pool of a single two-sided move gives one alternate slot and an exact total", () => {
+  const lib = [mk("wa", { warmup: "only", perSide: true }), ...mainsLib];
+  for (const seed of seeds(10)) {
+    const r = generateWorkout(lib, WARM, mulberry32(seed));
+    const warm = warmSlots(r);
+    assert.equal(warm.length, 1);
+    assert.equal(warm[0].side, "alternate");
+    assert.equal(r.durationSeconds, 600, `seed ${seed}`);
+  }
+});
+
+const WARM_COMBOS = [
+  [600, 40, 20],
+  [600, 45, 25],
+  [540, 50, 30],
+  [480, 30, 10],
+  [720, 50, 30],
+  [660, 35, 15],
+];
+
+for (const [total, work, rest] of WARM_COMBOS) {
+  test(`warm-up counted in the total: duration is exactly ${total}s with work ${work}s / rest ${rest}s (two-sided warm-up)`, () => {
+    for (const seed of seeds(10)) {
+      for (const circuit of [null, undefined]) {
+        const r = generateWorkout(
+          SYN,
+          { totalSeconds: total, workSeconds: work, restSeconds: rest, circuit, warmup: { enabled: true, countsInTotal: true } },
+          mulberry32(seed)
+        );
+        assert.equal(r.durationSeconds, total, `seed ${seed}`);
+        assert.equal(r.slots[r.slots.length - 1].endSec, total, `seed ${seed}`);
+        assert.equal(mainSlots(r)[0].startSec, 2 * (work + rest), `seed ${seed}: main starts after two single-window warm-up moves`);
+      }
+    }
+  });
+
+  test(`warm-up outside the total: the main section takes exactly ${total}s with work ${work}s / rest ${rest}s (two-sided warm-up)`, () => {
+    for (const seed of seeds(10)) {
+      for (const circuit of [null, undefined]) {
+        const r = generateWorkout(
+          SYN,
+          { totalSeconds: total, workSeconds: work, restSeconds: rest, circuit, warmup: { enabled: true, countsInTotal: false } },
+          mulberry32(seed)
+        );
+        const firstMain = mainSlots(r)[0];
+        assert.equal(firstMain.startSec, 2 * (work + rest), `seed ${seed}`);
+        assert.equal(r.durationSeconds - firstMain.startSec, total, `seed ${seed}`);
+        assert.equal(r.durationSeconds, total + 2 * (work + rest), `seed ${seed}`);
+      }
+    }
+  });
+
+  test(`warm-up durations are exact with the real library too (${total}s, work ${work}s / rest ${rest}s)`, () => {
+    for (const seed of seeds(15)) {
+      const base = { totalSeconds: total, workSeconds: work, restSeconds: rest };
+      const inTotal = generateWorkout(library, { ...base, warmup: { enabled: true, countsInTotal: true } }, mulberry32(seed));
+      assert.equal(inTotal.durationSeconds, total, `in total, seed ${seed}`);
+      const outside = generateWorkout(library, { ...base, warmup: { enabled: true, countsInTotal: false } }, mulberry32(seed));
+      const firstMain = mainSlots(outside)[0];
+      assert.equal(outside.durationSeconds - firstMain.startSec, total, `outside, seed ${seed}`);
+    }
+  });
+}
+
+test("generateWorkout: with a single-window warm-up cost the main section keeps every second of its share", () => {
+  // 600 total, 120 of it warm-up, leaves 480 for main: m-slots add up to exactly that.
+  const r = generateWorkout(SYN, { ...WARM, circuit: null }, mulberry32(4));
+  const main = mainSlots(r);
+  const end = main[main.length - 1].endSec;
+  assert.equal(end - main[0].startSec, 480);
+});
+
+test("generateWorkout: main-section two-sided moves still come as adjacent left, right pairs with no rest between (with a warm-up)", () => {
+  for (const lib of [library, SYN]) {
+    for (const seed of seeds(30)) {
+      const r = generateWorkout(lib, WARM, mulberry32(seed));
+      const main = mainSlots(r);
+      const libById = Object.fromEntries(lib.map((e) => [e.id, e]));
+      main.forEach((s, i) => {
+        if (libById[s.exerciseId].perSide) {
+          assert.ok(s.side === "left" || s.side === "right", `seed ${seed}: ${s.exerciseId} is ${s.side}`);
+          if (s.side === "left") {
+            const next = main[i + 1];
+            assert.ok(next && next.side === "right" && next.exerciseId === s.exerciseId, `seed ${seed}: left without right`);
+            assert.equal(s.restAfter, 0);
+            assert.equal(next.startSec, s.endSec);
+            // The right side gets at least the full work length (the final slot absorbs leftover).
+            if (next === r.slots[r.slots.length - 1]) assert.ok(next.workSeconds >= s.workSeconds);
+            else assert.equal(next.workSeconds, s.workSeconds, "both sides get the full work length");
+          } else {
+            const prev = main[i - 1];
+            assert.ok(prev && prev.side === "left" && prev.exerciseId === s.exerciseId, `seed ${seed}: right without left`);
+          }
+        } else {
+          assert.equal(s.side, null);
+        }
+      });
+    }
+  }
+});
+
+test("generateWorkout: a main-section circuit with a two-sided move still has left and right in every round, next to a two-sided warm-up", () => {
+  let sawPair = false;
+  for (const seed of seeds(25)) {
+    const r = generateWorkout(
+      SYN,
+      { ...WARM, totalSeconds: 720, circuit: { size: 3, rounds: 2 } },
+      mulberry32(seed)
+    );
+    const circuitBlock = r.blocks.find((b) => b.kind === "circuit");
+    if (!circuitBlock) continue;
+    const inCircuit = r.slots.slice(circuitBlock.firstSlot, circuitBlock.lastSlot + 1);
+    for (let i = 0; i < inCircuit.length; i++) {
+      const s = inCircuit[i];
+      assert.notEqual(s.side, "alternate");
+      if (s.side === "left") {
+        sawPair = true;
+        assert.equal(inCircuit[i + 1].side, "right");
+        assert.equal(inCircuit[i + 1].exerciseId, s.exerciseId);
+        assert.equal(inCircuit[i + 1].round, s.round);
+      }
+    }
+    assert.deepEqual(warmSlots(r).map((s) => s.side), ["alternate", "alternate"]);
+    assert.equal(r.durationSeconds, 720, `seed ${seed}`);
+  }
+  assert.ok(sawPair, "premise: some circuit contained a two-sided move");
+});
+
+test("generateWorkout: no slot has side alternate when the warm-up is off", () => {
+  for (const seed of seeds(30)) {
+    const r = generateWorkout(SYN, { ...WARM, warmup: { enabled: false } }, mulberry32(seed));
+    assert.ok(r.slots.every((s) => s.side !== "alternate"));
+  }
+});
+
+test("generateWorkout: the main section never gets side alternate", () => {
+  for (const lib of [library, SYN]) {
+    for (const seed of seeds(30)) {
+      const r = generateWorkout(lib, WARM, mulberry32(seed));
+      assert.ok(mainSlots(r).every((s) => s.side !== "alternate"), `seed ${seed}`);
+    }
   }
 });
 
