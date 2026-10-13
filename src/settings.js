@@ -29,7 +29,7 @@ function deepFreeze(o) {
 export const LIMITS = deepFreeze({
   totalSeconds: { min: 300, max: 1200, step: 60 },
   workSeconds: { min: 20, max: 60, step: 5 },
-  restSeconds: { min: 5, max: 45, step: 5 },
+  restSeconds: { min: 5, max: 10, step: 5 },
 });
 
 export const DIFFICULTIES = deepFreeze({ easy: 1, medium: 2, hard: 3 });
@@ -42,7 +42,7 @@ export const DEFAULTS = deepFreeze({
   advanced: {
     totalSeconds: 600,
     workSeconds: 40,
-    restSeconds: 20,
+    restSeconds: 10,
     warmup: { enabled: false, countsInTotal: true },
     position: { mode: "any", values: [] },
     focus: { mode: "any", values: [] },

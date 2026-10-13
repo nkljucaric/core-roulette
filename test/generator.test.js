@@ -136,6 +136,16 @@ test("does not mutate the input library or options (frozen inputs do not throw)"
 // Randomized options and resolved options
 // ---------------------------------------------------------------------------
 
+test("an unset rest is always 5 or 10 seconds and reaches both across seeds", () => {
+  const seen = new Set();
+  for (const seed of seeds(200)) {
+    const { restSeconds } = generateWorkout(library, {}, mulberry32(seed)).options;
+    assert.ok(restSeconds === 5 || restSeconds === 10, `rest ${restSeconds} (seed ${seed})`);
+    seen.add(restSeconds);
+  }
+  assert.deepEqual([...seen].sort((a, b) => a - b), [5, 10]);
+});
+
 test("unset time options are randomized within range and step, and listed in randomized", () => {
   const totals = new Set();
   const works = new Set();
@@ -147,7 +157,7 @@ test("unset time options are randomized within range and step, and listed in ran
       `total ${totalSeconds}`);
     assert.ok(workSeconds >= 30 && workSeconds <= 50 && workSeconds % 5 === 0,
       `work ${workSeconds}`);
-    assert.ok(restSeconds >= 10 && restSeconds <= 30 && restSeconds % 5 === 0,
+    assert.ok(restSeconds >= 5 && restSeconds <= 10 && restSeconds % 5 === 0,
       `rest ${restSeconds}`);
     for (const k of ["totalSeconds", "workSeconds", "restSeconds"]) {
       assert.ok(r.randomized.includes(k), `${k} should be listed in randomized`);

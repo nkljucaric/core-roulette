@@ -74,7 +74,7 @@ const EXPECTED_DEFAULTS = {
   advanced: {
     totalSeconds: 600,
     workSeconds: 40,
-    restSeconds: 20,
+    restSeconds: 10,
     warmup: { enabled: false, countsInTotal: true },
     position: { mode: "any", values: [] },
     focus: { mode: "any", values: [] },
@@ -89,7 +89,7 @@ const validSettings = () => ({
   advanced: {
     totalSeconds: 480,
     workSeconds: 45,
-    restSeconds: 15,
+    restSeconds: 5,
     warmup: { enabled: true, countsInTotal: false },
     position: { mode: "none", values: ["back", "side"] },
     focus: { mode: "any", values: ["obliques", "full"] },
@@ -107,7 +107,7 @@ test("LIMITS holds the slider ranges for total, work and rest", () => {
   assert.deepEqual(LIMITS, {
     totalSeconds: { min: 300, max: 1200, step: 60 },
     workSeconds: { min: 20, max: 60, step: 5 },
-    restSeconds: { min: 5, max: 45, step: 5 },
+    restSeconds: { min: 5, max: 10, step: 5 },
   });
 });
 
@@ -149,7 +149,7 @@ test("DEFAULTS starts in Quick Start with 10:00, medium and no warm-up", () => {
   assert.deepEqual(DEFAULTS.quick, { totalSeconds: 600, difficulty: "medium", warmup: false });
 });
 
-test("DEFAULTS Advanced matches the generator's usual 10:00 / 40s / 20s with no filters", () => {
+test("DEFAULTS Advanced matches the generator's usual 10:00 / 40s / 10s with no filters", () => {
   assert.deepEqual(DEFAULTS.advanced, EXPECTED_DEFAULTS.advanced);
 });
 
@@ -230,7 +230,7 @@ test("advancedOptions with circuit off passes every setting through and sets cir
   assert.deepEqual(advancedOptions(input, mulberry32(1)), {
     totalSeconds: 480,
     workSeconds: 45,
-    restSeconds: 15,
+    restSeconds: 5,
     warmup: { enabled: true, countsInTotal: false },
     position: { mode: "none", values: ["back", "side"] },
     focus: { mode: "any", values: ["obliques", "full"] },
@@ -281,7 +281,7 @@ function feasiblePairs({ totalSeconds, workSeconds, restSeconds }) {
 }
 
 const ROOMY = { totalSeconds: 1200, workSeconds: 20, restSeconds: 5 };
-const NOTHING_FITS = { totalSeconds: 300, workSeconds: 60, restSeconds: 45 };
+const NOTHING_FITS = { totalSeconds: 300, workSeconds: 60, restSeconds: 10 };
 
 test("advancedOptions circuit size is an integer in CIRCUIT_SIZE and rounds in CIRCUIT_ROUNDS", () => {
   for (const seed of seeds(200)) {
@@ -294,14 +294,14 @@ test("advancedOptions circuit size is an integer in CIRCUIT_SIZE and rounds in C
   }
 });
 
-test("advancedOptions circuit with the default 600/40/20 only ever fits 60% of the total (size x rounds x 60s <= 360s)", () => {
+test("advancedOptions circuit with the default 600/40/10 only ever fits 60% of the total (size x rounds x 50s <= 360s)", () => {
   for (const seed of seeds(300)) {
     const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
-    assert.ok(size * rounds * 60 <= 360, `${size}x${rounds} (seed ${seed})`);
+    assert.ok(size * rounds * 50 <= 360, `${size}x${rounds} (seed ${seed})`);
   }
 });
 
-test("advancedOptions circuit with the default 600/40/20 produces exactly 2x2, 2x3 and 3x2 across seeds", () => {
+test("advancedOptions circuit with the default 600/40/10 produces exactly 2x2, 2x3 and 3x2 across seeds", () => {
   const seen = new Set();
   for (const seed of seeds(300)) {
     const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
@@ -345,10 +345,10 @@ test("advancedOptions circuit falls back to 2 moves x 2 rounds when nothing fits
 });
 
 test("advancedOptions circuit treats a pair that exactly equals the budget as fitting", () => {
-  // Default 600/40/20: budget 360s, and 3 moves x 2 rounds x 60s is exactly 360s.
+  // 600s total at 50s work / 10s rest: budget 360s, and 3 moves x 2 rounds x 60s is exactly 360s.
   const seen = new Set();
   for (const seed of seeds(200)) {
-    const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+    const { size, rounds } = advancedOptions(advancedState({ workSeconds: 50, restSeconds: 10, circuit: true }), mulberry32(seed)).circuit;
     seen.add(`${size}x${rounds}`);
   }
   assert.ok(seen.has("3x2"));
@@ -537,6 +537,13 @@ test("randomizeAdvanced total, work and rest land on the generator's RANGES grid
   }
 });
 
+test("randomizeAdvanced never yields a rest above the 10s cap and only 5 or 10", () => {
+  for (const seed of seeds(400)) {
+    const { restSeconds } = randomizeAdvanced(DEFAULTS.advanced, mulberry32(seed));
+    assert.ok(restSeconds <= 10 && (restSeconds === 5 || restSeconds === 10), `rest ${restSeconds} (seed ${seed})`);
+  }
+});
+
 test("randomizeAdvanced results always lie inside LIMITS on the slider step grid", () => {
   for (const seed of seeds(200)) {
     const r = randomizeAdvanced(DEFAULTS.advanced, mulberry32(seed));
@@ -605,7 +612,7 @@ test("randomizeAdvanced does not depend on the current state's values", () => {
   const other = advancedState({
     totalSeconds: 1200,
     workSeconds: 60,
-    restSeconds: 45,
+    restSeconds: 10,
     circuit: true,
     warmup: { enabled: true, countsInTotal: false },
     position: { mode: "none", values: ["standing"] },
@@ -823,7 +830,7 @@ const numberCases = [
   ["quick totalSeconds", (v) => ({ quick: { totalSeconds: v } }), (o) => o.quick.totalSeconds, "totalSeconds", 600],
   ["advanced totalSeconds", (v) => ({ advanced: { totalSeconds: v } }), (o) => o.advanced.totalSeconds, "totalSeconds", 600],
   ["advanced workSeconds", (v) => ({ advanced: { workSeconds: v } }), (o) => o.advanced.workSeconds, "workSeconds", 40],
-  ["advanced restSeconds", (v) => ({ advanced: { restSeconds: v } }), (o) => o.advanced.restSeconds, "restSeconds", 20],
+  ["advanced restSeconds", (v) => ({ advanced: { restSeconds: v } }), (o) => o.advanced.restSeconds, "restSeconds", 10],
 ];
 
 for (const [label, build, read, limitKey, dflt] of numberCases) {
@@ -847,7 +854,7 @@ for (const [label, build, read, limitKey, dflt] of numberCases) {
   });
 
   test(`sanitize snaps an off-grid ${label} to the nearest step`, () => {
-    const base = min + step;
+    const base = Math.min(min + step, max - step); // rest has only two grid points, so snap up from min
     assert.equal(read(sanitize(build(base + Math.floor(step / 2) - 1))), base);
     assert.equal(read(sanitize(build(base + Math.ceil(step / 2) + 1))), base + step);
   });
@@ -861,6 +868,17 @@ for (const [label, build, read, limitKey, dflt] of numberCases) {
 
 test("sanitize snaps total 610 to 600", () => {
   assert.equal(sanitize({ quick: { totalSeconds: 610 } }).quick.totalSeconds, 600);
+});
+
+test("sanitize clamps a stored advanced rest above the 10s cap down to 10 (old 20 and 45 values)", () => {
+  for (const old of [11, 15, 20, 30, 45]) {
+    assert.equal(sanitize({ advanced: { restSeconds: old } }).advanced.restSeconds, 10, `stored ${old}`);
+  }
+});
+
+test("sanitize keeps a stored advanced rest of 5 and 10 unchanged", () => {
+  assert.equal(sanitize({ advanced: { restSeconds: 5 } }).advanced.restSeconds, 5);
+  assert.equal(sanitize({ advanced: { restSeconds: 10 } }).advanced.restSeconds, 10);
 });
 
 test("sanitize snaps rest 6 to 5", () => {
@@ -1118,6 +1136,17 @@ test("Quick Start leaves work, rest and circuit for the generator to randomize b
   assert.ok(!w.randomized.includes("totalSeconds"));
 });
 
+test("Quick Start random rest is always 5 or 10 seconds across seeds", () => {
+  const opts = quickOptions(DEFAULTS.quick);
+  const seen = new Set();
+  for (const seed of seeds(200)) {
+    const { restSeconds } = generateWorkout(library, opts, mulberry32(seed)).options;
+    assert.ok(restSeconds === 5 || restSeconds === 10, `rest ${restSeconds} (seed ${seed})`);
+    seen.add(restSeconds);
+  }
+  assert.deepEqual([...seen].sort((a, b) => a - b), [5, 10]);
+});
+
 test("Quick Start work and rest vary between seeds and circuits sometimes appear", () => {
   const opts = quickOptions(DEFAULTS.quick);
   const works = new Set();
@@ -1216,7 +1245,7 @@ test("Advanced with circuit on generates a circuit within the rolled size and ro
 
 const wasReduced = (w) => w.warnings.some((m) => m.startsWith("The circuit was reduced"));
 
-test("Advanced circuit on at 10:00 / 40s / 20s is almost never reduced by the generator and almost always appears", () => {
+test("Advanced circuit on at 10:00 / 40s / 10s is almost never reduced by the generator and almost always appears", () => {
   const runs = 300;
   let reduced = 0;
   let withCircuit = 0;
@@ -1231,7 +1260,7 @@ test("Advanced circuit on at 10:00 / 40s / 20s is almost never reduced by the ge
   assert.ok(withCircuit >= runs * 0.95, `circuit block in ${withCircuit}/${runs} runs`);
 });
 
-test("Advanced circuit on with a counted warm-up at 15:00 / 40s / 20s is rarely reduced by the generator", () => {
+test("Advanced circuit on with a counted warm-up at 15:00 / 40s / 10s is rarely reduced by the generator", () => {
   const runs = 300;
   let free = 0;
   for (const seed of seeds(runs)) {
@@ -1239,7 +1268,7 @@ test("Advanced circuit on with a counted warm-up at 15:00 / 40s / 20s is rarely 
     const state = advancedState({
       totalSeconds: 900,
       workSeconds: 40,
-      restSeconds: 20,
+      restSeconds: 10,
       warmup: { enabled: true, countsInTotal: true },
       circuit: true,
     });
@@ -1249,12 +1278,12 @@ test("Advanced circuit on with a counted warm-up at 15:00 / 40s / 20s is rarely 
   assert.ok(free >= runs * 0.9, `${free}/${runs} workouts free of a "reduced" warning`);
 });
 
-test("Advanced default state generates exactly 10:00 at 40s work and 20s rest", () => {
+test("Advanced default state generates exactly 10:00 at 40s work and 10s rest", () => {
   const opts = advancedOptions(DEFAULTS.advanced, mulberry32(1));
   const w = generateWorkout(library, opts, mulberry32(1));
   assert.equal(w.durationSeconds, 600);
   assert.equal(w.options.workSeconds, 40);
-  assert.equal(w.options.restSeconds, 20);
+  assert.equal(w.options.restSeconds, 10);
 });
 
 test("Advanced position and focus filters reach the generator and are honored", () => {
