@@ -59,10 +59,10 @@ function shuffle(rng, arr) {
 const workOf = (ex, work) => ex.workSeconds ?? work;
 const sidesOf = (ex) => (ex.perSide ? 2 : 1);
 // Time a move takes including the rest after it (and after both sides, if any).
-const costOf = (ex, work, rest) => workOf(ex, work) * sidesOf(ex) + rest;
+export const costOf = (ex, work, rest) => workOf(ex, work) * sidesOf(ex) + rest;
 
 // "full" focus overlaps with nothing, so it can sit next to any move.
-function focusOverlap(a, b) {
+export function focusOverlap(a, b) {
   if (a.includes("full") || b.includes("full")) return false;
   return a.some((f) => b.includes(f));
 }
@@ -72,7 +72,7 @@ function patternOk(ex, history) {
   return !(n >= 2 && history[n - 1].pattern === ex.pattern && history[n - 2].pattern === ex.pattern);
 }
 
-function countViolations(seq) {
+export function countViolations(seq) {
   let v = 0;
   for (let i = 1; i < seq.length; i++) {
     if (focusOverlap(seq[i - 1].focus, seq[i].focus)) v++;
@@ -101,6 +101,75 @@ function matchesFilter(values, filter) {
   if (filter.values.length === 0) return true;
   const hit = values.some((v) => filter.values.includes(v));
   return filter.mode === "any" ? hit : !hit;
+}
+
+// Moves eligible for the main section given resolved options (maxDifficulty,
+// position, focus). Warm-up-only moves never appear in the main section.
+export function mainPool(library, { maxDifficulty, position, focus }) {
+  return library.filter(
+    (ex) =>
+      ex.warmup !== "only" &&
+      ex.difficulty <= maxDifficulty &&
+      matchesFilter([ex.position], position) &&
+      matchesFilter(ex.focus, focus)
+  );
+}
+
+// Moves a warm-up may draw from: easy ones, ignoring the position and focus
+// filters (falls back to harder warm-up moves only if fewer than two are easy).
+export function warmupPool(library) {
+  const candidates = library.filter((ex) => ex.warmup === "eligible" || ex.warmup === "only");
+  const easy = candidates.filter((ex) => ex.difficulty === 1);
+  const harder = candidates.filter((ex) => ex.difficulty !== 1).sort((a, b) => a.difficulty - b.difficulty);
+  return easy.length >= WARMUP_MOVES ? easy : [...easy, ...harder];
+}
+
+// Expands block specs ({ id, kind, section, rounds, moves }) into the flat slot
+// list and block list. The last slot has no rest after it and absorbs leftover
+// time up to `target`; if the specs already exceed `target`, `overflow` is true
+// and nothing is added.
+export function buildTimeline(specs, { work, rest, target }) {
+  const slots = [];
+  const blocks = [];
+  for (const spec of specs) {
+    const firstSlot = slots.length;
+    for (let round = 1; round <= spec.rounds; round++) {
+      for (const ex of spec.moves) {
+        const sides = ex.perSide ? ["left", "right"] : [null];
+        sides.forEach((side, i) => {
+          slots.push({
+            index: 0,
+            exerciseId: ex.id,
+            name: ex.name,
+            section: spec.section,
+            blockId: spec.id,
+            round,
+            side,
+            workSeconds: workOf(ex, work),
+            restAfter: i === sides.length - 1 ? rest : 0,
+            startSec: 0,
+            endSec: 0,
+          });
+        });
+      }
+    }
+    blocks.push({ id: spec.id, kind: spec.kind, rounds: spec.rounds, firstSlot, lastSlot: slots.length - 1 });
+  }
+
+  const last = slots[slots.length - 1];
+  last.restAfter = 0;
+  const planned = slots.reduce((sum, s) => sum + s.workSeconds + s.restAfter, 0);
+  const overflow = planned > target;
+  if (!overflow) last.workSeconds += target - planned;
+
+  let t = 0;
+  slots.forEach((s, i) => {
+    s.index = i;
+    s.startSec = t;
+    s.endSec = t + s.workSeconds;
+    t = s.endSec + s.restAfter;
+  });
+  return { slots, blocks, durationSeconds: last.endSec, overflow };
 }
 
 // ---------------------------------------------------------------------------
@@ -283,14 +352,7 @@ export function generateWorkout(library, options = {}, rng = Math.random) {
     if (size >= 2 && rounds >= 2) circuitRequest = { size, rounds };
   }
 
-  // Main pool: warm-up-only moves never appear in the main section.
-  const eligible = library.filter(
-    (ex) =>
-      ex.warmup !== "only" &&
-      ex.difficulty <= maxDifficulty &&
-      matchesFilter([ex.position], position) &&
-      matchesFilter(ex.focus, focus)
-  );
+  const eligible = mainPool(library, { maxDifficulty, position, focus });
   if (eligible.length === 0) {
     throw new Error("No exercises match the selected filters (position, focus, difficulty).");
   }
@@ -300,10 +362,7 @@ export function generateWorkout(library, options = {}, rng = Math.random) {
   let warmupCost = 0;
   const warmIds = new Set();
   if (warmup.enabled) {
-    const candidates = library.filter((ex) => ex.warmup === "eligible" || ex.warmup === "only");
-    const easy = candidates.filter((ex) => ex.difficulty === 1);
-    const harder = candidates.filter((ex) => ex.difficulty !== 1).sort((a, b) => a.difficulty - b.difficulty);
-    const warmPool = easy.length >= WARMUP_MOVES ? easy : [...easy, ...harder];
+    const warmPool = warmupPool(library);
     if (warmPool.length === 0) {
       warnings.add("No warm-up exercises are available in the library.");
     } else {
@@ -384,51 +443,12 @@ export function generateWorkout(library, options = {}, rng = Math.random) {
   }
   if (specs.length === 0) throw new RangeError("The total time is too short for even one exercise.");
 
-  // Expand into the flat slot list.
-  const slots = [];
-  const blocks = [];
-  for (const spec of specs) {
-    const firstSlot = slots.length;
-    for (let round = 1; round <= spec.rounds; round++) {
-      for (const ex of spec.moves) {
-        const sides = ex.perSide ? ["left", "right"] : [null];
-        sides.forEach((side, i) => {
-          slots.push({
-            index: 0,
-            exerciseId: ex.id,
-            name: ex.name,
-            section: spec.section,
-            blockId: spec.id,
-            round,
-            side,
-            workSeconds: workOf(ex, workSeconds),
-            restAfter: i === sides.length - 1 ? restSeconds : 0,
-            startSec: 0,
-            endSec: 0,
-          });
-        });
-      }
-    }
-    blocks.push({ id: spec.id, kind: spec.kind, rounds: spec.rounds, firstSlot, lastSlot: slots.length - 1 });
-  }
-
-  // The last slot has no rest after it and absorbs any leftover time.
-  const last = slots[slots.length - 1];
-  last.restAfter = 0;
-  const planned = slots.reduce((sum, s) => sum + s.workSeconds + s.restAfter, 0);
-  if (planned > target) {
-    warnings.add("The warm-up and exercises are longer than the total time.");
-  } else {
-    last.workSeconds += target - planned;
-  }
-
-  let t = 0;
-  slots.forEach((s, i) => {
-    s.index = i;
-    s.startSec = t;
-    s.endSec = t + s.workSeconds;
-    t = s.endSec + s.restAfter;
+  const { slots, blocks, durationSeconds, overflow } = buildTimeline(specs, {
+    work: workSeconds,
+    rest: restSeconds,
+    target,
   });
+  if (overflow) warnings.add("The warm-up and exercises are longer than the total time.");
 
   return {
     options: {
@@ -442,7 +462,7 @@ export function generateWorkout(library, options = {}, rng = Math.random) {
       maxDifficulty,
     },
     randomized,
-    durationSeconds: last.endSec,
+    durationSeconds,
     slots,
     blocks,
     warnings: [...warnings],
