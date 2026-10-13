@@ -18,7 +18,7 @@ A personal web app (PWA) that generates a randomized 10-minute core workout and 
 
 ## Status
 
-M0 (iPhone spike) in progress — deployed and reachable, audio/wake-lock tests pending. See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
+M0 (iPhone spike) complete — tested on a real iPhone and working, so we're staying on the web/PWA path. Next up is M1 (exercise library and generator). See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
 
 ## Running locally
 
