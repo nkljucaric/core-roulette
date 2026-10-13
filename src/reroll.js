@@ -79,7 +79,7 @@ export function rerollSlot(library, workout, slotIndex, rng = Math.random) {
   // Time bookkeeping. leftover = time the last move absorbs.
   const work = options.workSeconds;
   const rest = options.restSeconds;
-  const specCost = (sp) => sp.rounds * sp.moves.reduce((sum, ex) => sum + costOf(ex, work, rest), 0);
+  const specCost = (sp) => sp.rounds * sp.moves.reduce((sum, ex) => sum + costOf(ex, work, rest, sp.section), 0);
   const leftoverOf = (all) => {
     const warmupCost = all.filter((sp) => sp.section === "warmup").reduce((sum, sp) => sum + specCost(sp), 0);
     const target = options.warmup.countsInTotal ? options.totalSeconds : options.totalSeconds + warmupCost;

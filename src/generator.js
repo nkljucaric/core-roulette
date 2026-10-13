@@ -18,8 +18,10 @@
 //   options     the fully resolved options (shows what was rolled)
 //   randomized  names of the options the generator filled in
 //   slots       one flat, expanded list of timed work periods: two-sided moves
-//               are two consecutive slots (side "left" then "right"), circuit
-//               rounds are separate entries
+//               in the main section are two consecutive slots (side "left"
+//               then "right"); in the warm-up a two-sided move is ONE slot with
+//               side "alternate" (the user alternates sides inside the window);
+//               circuit rounds are separate entries
 //   blocks      warm-up / straight / circuit groupings of the slots
 //   warnings    human-readable notes (repeats, relaxed rules, dropped circuit)
 //
@@ -57,9 +59,11 @@ function shuffle(rng, arr) {
 }
 
 const workOf = (ex, work) => ex.workSeconds ?? work;
-const sidesOf = (ex) => (ex.perSide ? 2 : 1);
+// Main-section two-sided moves run once per side; in the warm-up they run once,
+// alternating sides inside a single window.
+const sidesOf = (ex, section) => (ex.perSide && section !== "warmup" ? 2 : 1);
 // Time a move takes including the rest after it (and after both sides, if any).
-export const costOf = (ex, work, rest) => workOf(ex, work) * sidesOf(ex) + rest;
+export const costOf = (ex, work, rest, section = "main") => workOf(ex, work) * sidesOf(ex, section) + rest;
 
 // "full" focus overlaps with nothing, so it can sit next to any move.
 export function focusOverlap(a, b) {
@@ -135,7 +139,7 @@ export function buildTimeline(specs, { work, rest, target }) {
     const firstSlot = slots.length;
     for (let round = 1; round <= spec.rounds; round++) {
       for (const ex of spec.moves) {
-        const sides = ex.perSide ? ["left", "right"] : [null];
+        const sides = !ex.perSide ? [null] : spec.section === "warmup" ? ["alternate"] : ["left", "right"];
         sides.forEach((side, i) => {
           slots.push({
             index: 0,
@@ -375,7 +379,7 @@ export function generateWorkout(library, options = {}, rng = Math.random) {
       }
       for (const ex of moves) {
         warmIds.add(ex.id);
-        warmupCost += costOf(ex, workSeconds, restSeconds);
+        warmupCost += costOf(ex, workSeconds, restSeconds, "warmup");
       }
       specs.push({ id: "warmup", kind: "warmup", section: "warmup", rounds: 1, moves });
     }

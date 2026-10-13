@@ -4,6 +4,7 @@
 import { h, formatClock } from "./dom.js";
 
 function slotName(slot) {
+  if (slot.side === "alternate") return `${slot.name}, alternate sides`;
   return slot.side ? `${slot.name}, ${slot.side}` : slot.name;
 }
 

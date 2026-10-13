@@ -1327,3 +1327,248 @@ test("real workouts: the view tracks every slot, matching slot.side while workin
     }
   }
 });
+
+// ===========================================================================
+// Warm-up two-sided moves: one slot with side "alternate"
+// ===========================================================================
+
+// Like makeWorkout, but the first `warmCount` rows are in the warm-up section.
+function makeWarmWorkout(rows, warmCount) {
+  const w = makeWorkout(rows);
+  w.slots.forEach((s, i) => {
+    if (i < warmCount) {
+      s.section = "warmup";
+      s.blockId = "warmup";
+    }
+  });
+  return w;
+}
+
+// Work 10s / rest 5s, default 5s lead-in. Timeline:
+//   ready [-5,0)  work0(alternate) [0,10)  rest [10,15)  work1 [15,25)  rest [25,30)
+//   work2(left) [30,40)  work3(right) [40,50)  rest [50,55)  work4 [55,65)    duration 65
+// Slot 0 is a two-sided warm-up move: one slot, so one work segment and no side swap.
+const warmFixture = () =>
+  makeWarmWorkout(
+    [
+      ["bird-dog", "alternate", 10, 5],
+      ["cat-cow", null, 10, 5],
+      ["side-plank", "left", 10, 0],
+      ["side-plank", "right", 10, 5],
+      ["dead-bug", null, 10, 0],
+    ],
+    2
+  );
+
+// Two two-sided warm-up moves back to back, then one normal move.
+//   ready [-5,0)  work0 [0,10)  rest [10,15)  work1(alternate) [15,25)  rest [25,30)  work2 [30,40)
+const twoAlternateFixture = () =>
+  makeWarmWorkout(
+    [
+      ["bird-dog", "alternate", 10, 5],
+      ["reach-through", "alternate", 10, 5],
+      ["dead-bug", null, 10, 0],
+    ],
+    2
+  );
+
+const nonCountdown = (plan) => fullEvents(plan).filter((e) => e.type !== "countdown");
+
+test("warm-up alternate: the plan has one work segment for the slot, then a normal rest", () => {
+  const plan = buildPlan(warmFixture());
+  const seen = [];
+  for (let sec = -5; sec < 65; sec += 0.5) {
+    const v = viewAt(plan, sec);
+    const key = `${v.phase}:${v.slotIndex}`;
+    if (seen.at(-1) !== key) seen.push(key);
+  }
+  assert.deepEqual(seen, ["ready:null", "work:0", "rest:0", "work:1", "rest:1", "work:2", "work:3", "rest:3", "work:4"]);
+});
+
+test("warm-up alternate: its start event is work-start with side alternate, not side-swap", () => {
+  const plan = buildPlan(warmFixture());
+  const e = fullEvents(plan).filter((x) => x.slotIndex === 0 && (x.type === "work-start" || x.type === "side-swap"));
+  assert.deepEqual(norm(e), [E.work(0, 0, "alternate")]);
+});
+
+test("warm-up alternate: no side-swap event exists for the slot, and the only swap in the plan is the main right side", () => {
+  const plan = buildPlan(warmFixture());
+  const swaps = fullEvents(plan).filter((e) => e.type === "side-swap");
+  assert.deepEqual(norm(swaps), [E.swap(40, 3)]);
+});
+
+test("warm-up alternate: the full non-countdown event list for a workout with one alternate warm-up slot", () => {
+  const plan = buildPlan(warmFixture());
+  assert.deepEqual(norm(nonCountdown(plan)), [
+    E.ready(-5, 0),
+    E.work(0, 0, "alternate"),
+    E.rest(10, 0),
+    E.work(15, 1),
+    E.rest(25, 1),
+    E.work(30, 2, "left"),
+    E.swap(40, 3),
+    E.rest(50, 3),
+    E.work(55, 4),
+    E.done(65, 4),
+  ]);
+});
+
+test("warm-up alternate: the slot gets the usual countdown 3, 2, 1 before its single work phase ends", () => {
+  const plan = buildPlan(warmFixture());
+  const cds = fullEvents(plan).filter((e) => e.type === "countdown" && e.slotIndex === 0 && e.phase === "work");
+  assert.deepEqual(norm(cds), [E.cd(7, 3, "work", 0), E.cd(8, 2, "work", 0), E.cd(9, 1, "work", 0)]);
+});
+
+test("warm-up alternate: view.side is alternate for the whole work phase of the slot", () => {
+  const plan = buildPlan(warmFixture());
+  for (const sec of [0, 0.001, 3, 9.999]) {
+    const v = viewAt(plan, sec);
+    assert.equal(v.phase, "work", `at ${sec}`);
+    assert.equal(v.slotIndex, 0);
+    assert.equal(v.side, "alternate", `at ${sec}`);
+  }
+});
+
+test("warm-up alternate: the view during the slot has the full single-interval duration and remaining time", () => {
+  const plan = buildPlan(warmFixture());
+  const v = viewAt(plan, 0);
+  assert.equal(v.phaseDurationSec, 10);
+  assert.equal(v.phaseRemainingSec, 10);
+  assert.equal(viewAt(plan, 7).phaseRemainingSec, 3);
+});
+
+test("warm-up alternate: nextIsSideSwap is false while it is the current slot, and next is the following move", () => {
+  const plan = buildPlan(warmFixture());
+  const v = viewAt(plan, 3);
+  assert.equal(v.nextIsSideSwap, false);
+  assert.equal(v.next.exerciseId, "cat-cow");
+});
+
+test("warm-up alternate: nextIsSideSwap is false in the rest before it and when it is the next slot", () => {
+  const plan = buildPlan(twoAlternateFixture());
+  const rest = viewAt(plan, 12);
+  assert.equal(rest.phase, "rest");
+  assert.equal(rest.next.side, "alternate");
+  assert.equal(rest.nextIsSideSwap, false);
+  const work0 = viewAt(plan, 3);
+  assert.equal(work0.next.side, "alternate");
+  assert.equal(work0.nextIsSideSwap, false);
+});
+
+test("warm-up alternate: nextIsSideSwap is false during the lead-in when the first slot is alternate", () => {
+  const plan = buildPlan(twoAlternateFixture());
+  const v = viewAt(plan, -3);
+  assert.equal(v.phase, "ready");
+  assert.equal(v.next.side, "alternate");
+  assert.equal(v.nextIsSideSwap, false);
+});
+
+test("warm-up alternate: two alternate slots in a row give two work-starts and no side-swap", () => {
+  const plan = buildPlan(twoAlternateFixture());
+  assert.deepEqual(norm(nonCountdown(plan)), [
+    E.ready(-5, 0),
+    E.work(0, 0, "alternate"),
+    E.rest(10, 0),
+    E.work(15, 1, "alternate"),
+    E.rest(25, 1),
+    E.work(30, 2),
+    E.done(40, 2),
+  ]);
+});
+
+test("main two-sided moves still produce work-start for left then side-swap for right (next to a warm-up alternate slot)", () => {
+  const plan = buildPlan(warmFixture());
+  const starts = fullEvents(plan).filter((e) => e.type === "work-start" || e.type === "side-swap");
+  assert.deepEqual(
+    norm(starts.filter((e) => e.slotIndex >= 2 && e.slotIndex <= 3)),
+    [E.work(30, 2, "left"), E.swap(40, 3)]
+  );
+  // The left side still flags the upcoming swap; the right side does not.
+  assert.equal(viewAt(plan, 32).nextIsSideSwap, true);
+  assert.equal(viewAt(plan, 42).nextIsSideSwap, false);
+});
+
+test("warm-up alternate: events are still delivered exactly once at any cadence", () => {
+  const plan = buildPlan(warmFixture());
+  const reference = norm(fullEvents(plan));
+  for (const step of [250, 1000, 7000]) {
+    const { events } = runTicks(plan, everyMs(plan, step));
+    assert.deepEqual(norm(events), reference, `step ${step}`);
+  }
+  assert.deepEqual(norm(runTicks(plan, [farMs(plan)]).events), reference);
+});
+
+// A real generateWorkout whose warm-up pool is two two-sided moves.
+const mkEx = (id, over = {}) => ({
+  id,
+  name: `Move ${id}`,
+  focus: ["full"],
+  position: "back",
+  pattern: "static",
+  difficulty: 1,
+  perSide: false,
+  formCue: "cue",
+  ...over,
+});
+const PATTERNS = ["static", "dynamic", "rotational"];
+const twoSidedWarmLib = [
+  mkEx("wa", { warmup: "only", perSide: true }),
+  mkEx("wb", { warmup: "only", perSide: true, pattern: "dynamic" }),
+  ...Array.from({ length: 12 }, (_, i) => mkEx(`m${i + 1}`, { pattern: PATTERNS[i % 3], perSide: i % 3 === 0 })),
+];
+const warmGen = (seed) =>
+  generateWorkout(
+    twoSidedWarmLib,
+    { totalSeconds: 600, workSeconds: 40, restSeconds: 20, circuit: null, warmup: { enabled: true } },
+    mulberry32(seed)
+  );
+
+test("real two-sided warm-up: the warm-up slots start with work-start events carrying side alternate", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const workout = warmGen(seed);
+    const warmIdx = workout.slots.filter((s) => s.section === "warmup").map((s) => s.index);
+    assert.deepEqual(warmIdx, [0, 1], `seed ${seed}`);
+    const starts = fullEvents(buildPlan(workout)).filter((e) => e.type === "work-start" || e.type === "side-swap");
+    for (const i of warmIdx) {
+      assert.deepEqual(
+        norm(starts.find((e) => e.slotIndex === i)),
+        E.work(workout.slots[i].startSec, i, "alternate"),
+        `seed ${seed} slot ${i}`
+      );
+    }
+  }
+});
+
+test("real two-sided warm-up: side-swap events mark exactly the main right-side slots and none of the warm-up", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const workout = warmGen(seed);
+    const swaps = fullEvents(buildPlan(workout)).filter((e) => e.type === "side-swap").map((e) => e.slotIndex);
+    const rights = workout.slots.filter((s) => s.section === "main" && s.side === "right").map((s) => s.index);
+    assert.deepEqual(swaps, rights, `seed ${seed}`);
+    assert.ok(swaps.every((i) => workout.slots[i].section === "main"));
+  }
+});
+
+test("real two-sided warm-up: the view reports side alternate for each warm-up slot and nextIsSideSwap stays false there", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const workout = warmGen(seed);
+    const plan = buildPlan(workout);
+    for (const slot of workout.slots.filter((s) => s.section === "warmup")) {
+      const v = viewAt(plan, slot.startSec);
+      assert.equal(v.phase, "work");
+      assert.equal(v.slotIndex, slot.index);
+      assert.equal(v.side, "alternate", `seed ${seed}`);
+      assert.equal(v.phaseDurationSec, slot.workSeconds);
+      assert.equal(v.nextIsSideSwap, false, `seed ${seed} slot ${slot.index}`);
+    }
+  }
+});
+
+test("real two-sided warm-up: the plan lasts the full workout duration and shows the full total at the start", () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const workout = warmGen(seed);
+    const plan = buildPlan(workout);
+    assert.equal(plan.durationSec, 600, `seed ${seed}`);
+    assert.equal(viewAt(plan, 0).totalRemainingSec, 600);
+  }
+});
