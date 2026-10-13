@@ -41,12 +41,14 @@ User-set inputs (settings screen, #19). Any input the user leaves unset is rando
 - Total workout time (default 10:00).
 - Work length per exercise and rest length, each a slider (defaults 40s work / 20s rest).
 - Warm-up on/off, and whether it counts inside the total time. Warm-up moves come from exercises flagged `warmup`.
-- Position filter (`back`, `face-down`, `other`) and focus filter (including `obliques`): any, all, or none.
+- Position filter (`back`, `face-down`, `other`) and focus filter (including `obliques`): mode `any` or `none` ('all' dropped for v1). No selection means no filtering.
 - Circuits: a group of exercises repeated for N rounds, shown on the preview screen as a bracket with a rounds badge (#20).
 
 Rules:
 
-- `perSide` exercises count as two half-slots (swap sides mid-slot with a clear on-screen/beep cue).
+- `perSide` exercises run once per side, back to back: two consecutive full-length slots (`left`, then `right`) with no rest between the sides and the normal rest after the pair.
+- The last slot has no rest after it and absorbs any leftover time, so the total is exact (it can run noticeably longer than the work length).
+- Unset time values are randomized in tunable ranges (total 8-12 min, work 30-50s, rest 10-30s); a circuit is 2-5 moves x 2-4 rounds, one per workout. See `src/generator.js`.
 - No repeat of the same `focus` back-to-back; mix `pattern` (static / dynamic / rotational); respect difficulty setting.
 - No exercise repeated within one workout, except circuit rounds.
 - "Re-roll" replaces the whole workout or a single slot, on the preview screen before the workout starts.
@@ -97,4 +99,6 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 - 2026-10-12: M0 spike passed. Nick tested the deployed page on his iPhone and everything works (#1-#4). Verdict (#5): stay on the web/PWA path; Capacitor (#15) stays in `later`. M1+ is unblocked.
 - 2026-10-12: Workout is user-configurable instead of fixed 10:00 / 40s / 20s: total time, work and rest sliders, warm-up, position and focus filters, circuits. Unset inputs are randomized. Position is a new tag alongside focus (obliques stays a focus value). Warm-up moves come from the library via a `warmup` flag. Saved workouts need a backend and are parked for V2 (#21). Issues #18-#21.
 - 2026-10-12: Schema finalized in #6. `position` is `back` | `face-down` | `other` (every move has one; `other` covers side, seated, all-fours and standing moves). `warmup` is `eligible` | `only` | omitted. Starter library is 16 moves; the full library is authored in #18. Added `test/exercises.test.js` as a data-validation exception to the logic-only testing rule.
+- 2026-10-13: Generator (#7) built test-first in `src/generator.js`. Decisions: circuits are a group of 2-5 moves x 2-4 rounds, one per workout; unset time values are random within ranges; filter modes are `any`/`none` only; the last move absorbs leftover time; two-sided moves get the full work time on each side, back to back (supersedes the earlier half-slot idea); warm-up is 2 easy moves from the `warmup` flag, ignoring position/focus filters; too few matching moves means repeats (never back-to-back) plus a warning, relaxing pattern mixing, then back-to-back focus, then no-repeats. The generator accepts `maxDifficulty`; no UI control yet.
+- 2026-10-13: Product direction: eventually two paths, a "Quick Start" (user picks time and difficulty, everything else random) and an "Advanced" editor (full settings). Both call the same `generateWorkout` with different options.
 - (add further dated entries here as decisions are made)
