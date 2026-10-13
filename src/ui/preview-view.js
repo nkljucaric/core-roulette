@@ -60,7 +60,7 @@ function plainSection(section) {
   );
 }
 
-export function renderPreview({ workout, onReroll, onBack }) {
+export function renderPreview({ workout, onStart, onReroll, onBack }) {
   const p = buildPreview(workout);
 
   return h("main", { class: "screen tall-bar" },
@@ -76,8 +76,7 @@ export function renderPreview({ workout, onReroll, onBack }) {
       h("div", { class: "notice", role: "status" }, p.warnings.map((w) => h("p", {}, w))),
     h("div", { class: "panel" }, p.sections.map((s) => (s.kind === "circuit" ? circuitSection(s) : plainSection(s)))),
     h("div", { class: "bar" },
-      h("button", { type: "button", class: "btn primary", disabled: true }, "Start"),
-      h("p", { class: "bar-hint hint" }, "Runner comes next"),
+      h("button", { type: "button", class: "btn primary", onClick: onStart }, "Start"),
       h("div", { class: "bar-row" },
         h("button", { type: "button", class: "btn secondary", onClick: onBack }, "Settings"),
         h("button", { type: "button", class: "btn secondary", onClick: onReroll }, "Re-roll")

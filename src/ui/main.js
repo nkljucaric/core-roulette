@@ -5,6 +5,8 @@ import { h } from "./dom.js";
 import { loadStoredSettings, saveStoredSettings } from "./storage.js";
 import { renderSettings } from "./settings-view.js";
 import { renderPreview } from "./preview-view.js";
+import { renderRunner } from "./runner-view.js";
+import { renderDone } from "./done-view.js";
 import { generateWorkout } from "../generator.js";
 import { sanitize, buildOptions, randomizeAdvanced } from "../settings.js";
 
@@ -15,9 +17,13 @@ const state = {
   settings: sanitize(loadStoredSettings()),
   workout: null,
   error: null,
+  runner: null,
 };
 
 function show(el) {
+  // The runner owns a timer and a listener, so it is torn down before any swap.
+  state.runner?.destroy();
+  state.runner = null;
   root.replaceChildren(el);
   window.scrollTo(0, 0);
 }
@@ -61,8 +67,34 @@ function showSettings() {
 function showPreview() {
   show(renderPreview({
     workout: state.workout,
+    onStart: showRunner,
     onReroll: () => (generate() ? showPreview() : showSettings()),
     onBack: showSettings,
+  }));
+}
+
+// Hooks for audio (#11) and wake lock (#13) attach here. Anything that needs a
+// user gesture (unlocking the AudioContext) must run synchronously in the Start
+// tap, which is why showRunner is called straight from the click handler.
+const runnerHooks = {};
+
+function showRunner() {
+  const runner = renderRunner({
+    workout: state.workout,
+    library: state.library,
+    hooks: runnerHooks,
+    onDone: showDone,
+    onExit: showPreview,
+  });
+  show(runner.el);
+  state.runner = runner;
+}
+
+function showDone() {
+  show(renderDone({
+    workout: state.workout,
+    onNew: () => (generate() ? showPreview() : showSettings()),
+    onSettings: showSettings,
   }));
 }
 
