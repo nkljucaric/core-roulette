@@ -51,7 +51,7 @@ Rules:
 - Unset time values are randomized in tunable ranges (total 8-12 min, work 30-50s, rest 10-30s); a circuit is 2-5 moves x 2-4 rounds, one per workout. See `src/generator.js`.
 - No repeat of the same `focus` back-to-back; mix `pattern` (static / dynamic / rotational); respect difficulty setting.
 - No exercise repeated within one workout, except circuit rounds.
-- "Re-roll" replaces the whole workout or a single slot, on the preview screen before the workout starts.
+- "Re-roll" happens on the preview screen before the workout starts. Whole workout: the Shell keeps the user's original options and calls `generateWorkout` again (unset values re-randomize). Single move: `rerollSlot` in `src/reroll.js` (see the decisions log).
 
 ## Exercise schema (`exercises.json`)
 
@@ -84,7 +84,7 @@ Before implementing an issue, use the `feature-scoper` subagent to have a short 
 
 ## Testing
 
-Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. One deliberate exception: `test/exercises.test.js` validates `exercises.json` (unique ids, valid enum values) to catch typos as the library grows. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
+Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `reroll.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. One deliberate exception: `test/exercises.test.js` validates `exercises.json` (unique ids, valid enum values) to catch typos as the library grows. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
 
 ## Working agreements
 
@@ -101,4 +101,5 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 - 2026-10-12: Schema finalized in #6. `position` is `back` | `face-down` | `other` (every move has one; `other` covers side, seated, all-fours and standing moves). `warmup` is `eligible` | `only` | omitted. Starter library is 16 moves; the full library is authored in #18. Added `test/exercises.test.js` as a data-validation exception to the logic-only testing rule.
 - 2026-10-13: Generator (#7) built test-first in `src/generator.js`. Decisions: circuits are a group of 2-5 moves x 2-4 rounds, one per workout; unset time values are random within ranges; filter modes are `any`/`none` only; the last move absorbs leftover time; two-sided moves get the full work time on each side, back to back (supersedes the earlier half-slot idea); warm-up is 2 easy moves from the `warmup` flag, ignoring position/focus filters; too few matching moves means repeats (never back-to-back) plus a warning, relaxing pattern mixing, then back-to-back focus, then no-repeats. The generator accepts `maxDifficulty`; no UI control yet.
 - 2026-10-13: Product direction: eventually two paths, a "Quick Start" (user picks time and difficulty, everything else random) and an "Advanced" editor (full settings). Both call the same `generateWorkout` with different options.
+- 2026-10-13: Re-roll (#8) built test-first. `rerollSlot(library, workout, slotIndex, rng)` returns `{ workout, changed, reason }`. It replaces a whole move (both sides of a two-sided move, every round of a circuit move) with one that is main-pool (or warm-up-pool) eligible and not already in the workout, rebuilding from base work times so the total stays exact; a swap is allowed only if the leftover stays non-negative and changes by at most one work interval (so circuit swaps are effectively same-cost). It prefers replacements that keep neighbors' focus/pattern rules; if none exist it loosens those (fewest violations) and adds a warning; if nothing fits it returns the same workout with `changed: false, reason: "no-alternative"`. Warm-up moves can be re-rolled in the logic; whether the UI offers it is a UI decision (#20). Slot indices are not stable across a re-roll, so the UI re-renders from the returned workout. Shared helpers (`buildTimeline`, `mainPool`, `warmupPool`) now live in `src/generator.js`. Known gap filed as #25.
 - (add further dated entries here as decisions are made)
