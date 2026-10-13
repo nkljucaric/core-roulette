@@ -358,5 +358,66 @@
     "difficulty": 2,
     "perSide": true,
     "formCue": "One leg out, one leg in, elbow to opposite knee"
+  },
+  {
+    "id": "side-lying-leg-raise",
+    "name": "Side-Lying Leg Raise",
+    "focus": ["obliques"],
+    "position": "side",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": true,
+    "formCue": "Hips stacked, lift the top leg with control, don't roll back"
+  },
+  {
+    "id": "side-crunch",
+    "name": "Side Crunch",
+    "focus": ["obliques"],
+    "position": "side",
+    "pattern": "dynamic",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "Elbow toward knee in a small crunch, hips stay stacked"
+  },
+  {
+    "id": "side-plank-reach-through",
+    "name": "Side Plank Reach-Through",
+    "focus": ["obliques"],
+    "position": "side",
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "Thread the top arm under your body, then reach to the ceiling"
+  },
+  {
+    "id": "side-plank-leg-lift",
+    "name": "Side Plank Leg Lift",
+    "focus": ["obliques", "deep-core"],
+    "position": "side",
+    "pattern": "dynamic",
+    "difficulty": 3,
+    "perSide": true,
+    "formCue": "Hips high, lift the top leg without letting your hips drop"
+  },
+  {
+    "id": "standing-oblique-crunch",
+    "name": "Standing Oblique Crunch",
+    "focus": ["obliques"],
+    "position": "standing",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": true,
+    "formCue": "Elbow to same-side knee, stay tall, don't lean forward"
+  },
+  {
+    "id": "standing-side-bend",
+    "name": "Standing Side Bend",
+    "focus": ["obliques"],
+    "position": "standing",
+    "warmup": "eligible",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Slide a hand down your leg, lengthen the opposite side"
   }
 ]

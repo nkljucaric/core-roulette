@@ -915,39 +915,50 @@ test("warm-up block spans exactly the warm-up slots and non-circuit blocks have 
 // Too few moves
 // ---------------------------------------------------------------------------
 
+// These use a small made-up library so they keep testing the "too few moves"
+// path however large exercises.json grows: 3 side moves (the filtered pool) and
+// 6 back moves (filtered out).
+const NARROW_LIB = [
+  ["s1", "side", "obliques", "static"],
+  ["s2", "side", "deep-core", "dynamic"],
+  ["s3", "side", "lower-abs", "rotational"],
+  ["b1", "back", "upper-abs", "static"],
+  ["b2", "back", "obliques", "dynamic"],
+  ["b3", "back", "deep-core", "rotational"],
+  ["b4", "back", "lower-abs", "static"],
+  ["b5", "back", "upper-abs", "dynamic"],
+  ["b6", "back", "obliques", "rotational"],
+].map(([id, position, focus, pattern]) => ({
+  id,
+  name: id,
+  focus: [focus],
+  position,
+  pattern,
+  difficulty: 1,
+  perSide: false,
+  formCue: "cue",
+}));
+const NARROW_OPTIONS = {
+  totalSeconds: 600,
+  workSeconds: 40,
+  restSeconds: 20,
+  circuit: null,
+  position: { mode: "any", values: ["side"] },
+};
+
 test("with a narrow filter the workout still reaches the exact duration and warns", () => {
-  // position "side" leaves only side-plank and side-plank-hip-dips in the main pool.
+  const narrowById = Object.fromEntries(NARROW_LIB.map((e) => [e.id, e]));
   for (const seed of seeds(20)) {
-    const r = generateWorkout(
-      library,
-      {
-        totalSeconds: 600,
-        workSeconds: 40,
-        restSeconds: 20,
-        circuit: null,
-        position: { mode: "any", values: ["side"] },
-      },
-      mulberry32(seed)
-    );
+    const r = generateWorkout(NARROW_LIB, NARROW_OPTIONS, mulberry32(seed));
     assert.equal(r.durationSeconds, 600, `seed ${seed}`);
     assert.ok(r.warnings.length > 0, `seed ${seed}: expected a warning`);
-    for (const id of mainIds(r)) assert.equal(byId[id].position, "side");
+    for (const id of mainIds(r)) assert.equal(narrowById[id].position, "side");
   }
 });
 
 test("with too few moves, exercises repeat but never back-to-back", () => {
   for (const seed of seeds(20)) {
-    const r = generateWorkout(
-      library,
-      {
-        totalSeconds: 600,
-        workSeconds: 40,
-        restSeconds: 20,
-        circuit: null,
-        position: { mode: "any", values: ["side"] },
-      },
-      mulberry32(seed)
-    );
+    const r = generateWorkout(NARROW_LIB, NARROW_OPTIONS, mulberry32(seed));
     const entries = r.slots.filter((s) => s.side !== "right");
     const ids = entries.map((s) => s.exerciseId);
     assert.ok(new Set(ids).size < ids.length, "expected at least one repeated exercise");
