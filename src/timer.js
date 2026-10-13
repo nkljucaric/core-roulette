@@ -22,7 +22,8 @@
 //
 // Event types: ready, work-start, side-swap (replaces work-start at the
 // left-to-right boundary of a two-sided move), rest-start, countdown (n = 3, 2, 1
-// for the phase that is ending), done.
+// for the phase that is ending), done. A warm-up slot with side "alternate" is a
+// single window: it gets a plain work-start and never a side-swap.
 
 const MS = 1000;
 const toMs = (sec) => Math.round(sec * MS);
