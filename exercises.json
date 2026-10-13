@@ -15,14 +15,14 @@
     "focus": ["upper-abs", "obliques"],
     "position": "back",
     "pattern": "rotational",
-    "difficulty": 1,
+    "difficulty": 2,
     "perSide": false,
     "formCue": "Slow elbow to opposite knee, low back stays down"
   },
   {
     "id": "dead-bug",
     "name": "Dead Bug",
-    "focus": ["deep-core", "lower-abs"],
+    "focus": ["lower-abs", "deep-core"],
     "position": "back",
     "warmup": "eligible",
     "pattern": "dynamic",
@@ -74,7 +74,7 @@
     "id": "russian-twist",
     "name": "Russian Twist",
     "focus": ["obliques"],
-    "position": "other",
+    "position": "back",
     "pattern": "rotational",
     "difficulty": 2,
     "perSide": false,
@@ -84,7 +84,7 @@
     "id": "bird-dog",
     "name": "Bird Dog",
     "focus": ["deep-core"],
-    "position": "other",
+    "position": "face-down",
     "warmup": "eligible",
     "pattern": "dynamic",
     "difficulty": 1,
@@ -104,7 +104,7 @@
   {
     "id": "plank-shoulder-taps",
     "name": "Plank Shoulder Taps",
-    "focus": ["deep-core", "obliques"],
+    "focus": ["obliques", "deep-core"],
     "position": "face-down",
     "pattern": "dynamic",
     "difficulty": 2,
@@ -135,7 +135,7 @@
     "id": "cat-cow",
     "name": "Cat-Cow",
     "focus": ["deep-core"],
-    "position": "other",
+    "position": "face-down",
     "warmup": "only",
     "pattern": "dynamic",
     "difficulty": 1,
@@ -163,5 +163,200 @@
     "difficulty": 1,
     "perSide": false,
     "formCue": "Hips forward, rotate through the ribcage with loose arms"
+  },
+  {
+    "id": "crunch",
+    "name": "Crunch",
+    "focus": ["upper-abs"],
+    "position": "back",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Chin off chest, lift shoulder blades, ribs toward hips"
+  },
+  {
+    "id": "heel-taps",
+    "name": "Heel Taps",
+    "focus": ["obliques"],
+    "position": "back",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Reach fingertips to heels side to side, shoulders stay lifted"
+  },
+  {
+    "id": "leg-lowers",
+    "name": "Leg Lowers",
+    "focus": ["lower-abs"],
+    "position": "back",
+    "pattern": "dynamic",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Lower legs slowly, stop before your low back lifts"
+  },
+  {
+    "id": "hollow-rock",
+    "name": "Hollow Rock",
+    "focus": ["upper-abs", "lower-abs"],
+    "position": "back",
+    "pattern": "dynamic",
+    "difficulty": 3,
+    "perSide": false,
+    "formCue": "Stay hollow like a banana, rock from shoulders to hips"
+  },
+  {
+    "id": "high-plank-hold",
+    "name": "High Plank Hold",
+    "focus": ["full"],
+    "position": "face-down",
+    "pattern": "static",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Hands under shoulders, ribs down, straight line head to heels"
+  },
+  {
+    "id": "plank-hip-dips",
+    "name": "Plank Hip Dips",
+    "focus": ["obliques"],
+    "position": "face-down",
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Forearms planted, rotate hips side to side, shoulders still"
+  },
+  {
+    "id": "spiderman-plank",
+    "name": "Spider Plank",
+    "focus": ["lower-abs", "obliques"],
+    "position": "face-down",
+    "pattern": "rotational",
+    "difficulty": 3,
+    "perSide": false,
+    "formCue": "Knee to same-side elbow, hips low and level"
+  },
+  {
+    "id": "cross-body-mountain-climbers",
+    "name": "Cross-Body Mountain Climbers",
+    "focus": ["obliques", "full"],
+    "position": "face-down",
+    "pattern": "rotational",
+    "difficulty": 3,
+    "perSide": false,
+    "formCue": "Drive knee toward the opposite elbow, hips low"
+  },
+  {
+    "id": "bear-plank",
+    "name": "Bear Plank",
+    "focus": ["deep-core"],
+    "position": "other",
+    "pattern": "static",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Knees hover an inch off the floor, back flat"
+  },
+  {
+    "id": "side-plank-hip-dips",
+    "name": "Side Plank Hip Dips",
+    "focus": ["obliques"],
+    "position": "other",
+    "pattern": "dynamic",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "Lower hip toward the floor, lift back up, shoulders stacked"
+  },
+  {
+    "id": "standing-knee-to-elbow",
+    "name": "Standing Knee-to-Elbow",
+    "focus": ["obliques"],
+    "position": "other",
+    "warmup": "only",
+    "pattern": "rotational",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Drive knee across to the opposite elbow, stand tall"
+  },
+  {
+    "id": "wood-chop",
+    "name": "Wood Chop",
+    "focus": ["obliques", "full"],
+    "position": "other",
+    "warmup": "eligible",
+    "pattern": "rotational",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Sweep hands high to low across the body, pivot your feet"
+  },
+  {
+    "id": "inchworm",
+    "name": "Inchworm",
+    "focus": ["full"],
+    "position": "other",
+    "warmup": "only",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Walk hands out to plank, walk feet back in, soft knees"
+  },
+  {
+    "id": "reach-through",
+    "name": "Reach Through",
+    "focus": ["obliques"],
+    "position": "other",
+    "warmup": "only",
+    "pattern": "rotational",
+    "difficulty": 1,
+    "perSide": true,
+    "formCue": "From all-fours, reach one arm under, rotate through the upper back"
+  },
+  {
+    "id": "sit-up",
+    "name": "Sit up",
+    "focus": ["upper-abs", "deep-core"],
+    "position": "back",
+    "pattern": "dynamic",
+    "difficulty": 1,
+    "perSide": false,
+    "formCue": "Feet planted, curl up with control, keep your neck relaxed"
+  },
+  {
+    "id": "plank-walk",
+    "name": "Plank Walk",
+    "focus": ["full"],
+    "position": "face-down",
+    "warmup": "eligible",
+    "pattern": "static",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Hips level as you walk your hands out and back"
+  },
+  {
+    "id": "windshield-wiper",
+    "name": "Windsheild wipers",
+    "focus": ["obliques", "full"],
+    "position": "back",
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": false,
+    "formCue": "Legs up, arms wide, lower both legs side to side"
+  },
+  {
+    "id": "cross-body-crunch",
+    "name": "Cross-Body Crunch",
+    "focus": ["upper-abs", "obliques"],
+    "position": "back",
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "Elbow to opposite knee, legs up or down; one side at a time"
+  },
+  {
+    "id": "single-leg-bicycle",
+    "name": "Single leg bicycle",
+    "focus": ["upper-abs", "obliques"],
+    "position": "back",
+    "pattern": "rotational",
+    "difficulty": 2,
+    "perSide": true,
+    "formCue": "One leg out, one leg in, elbow to opposite knee"
   }
 ]

@@ -313,15 +313,14 @@ test("returns { workout, changed, reason } and a changed workout has the generat
 });
 
 test("when nothing changes the result is changed: false, reason no-alternative and the very same workout object", () => {
-  let unchanged = 0;
+  // Whether any re-roll in this pool is a no-op depends on how big exercises.json
+  // is, so only the shape of unchanged results is asserted here. The no-alternative
+  // cases themselves are built from tiny synthetic libraries further down.
   for (const { c, res } of rerolls()) {
     if (res.changed) continue;
-    unchanged++;
     assert.equal(res.reason, "no-alternative");
     assert.equal(res.workout, c.w);
   }
-  // The small filtered configs leave few spare moves, so some re-rolls are no-ops.
-  assert.ok(unchanged > 0, "expected at least one no-alternative re-roll in the pool");
 });
 
 test("does not mutate a deep-frozen library or workout (frozen inputs do not throw)", () => {
