@@ -30,7 +30,7 @@
 export const RANGES = {
   totalSeconds: { min: 480, max: 720, step: 60 },
   workSeconds: { min: 30, max: 50, step: 5 },
-  restSeconds: { min: 10, max: 30, step: 5 },
+  restSeconds: { min: 5, max: 10, step: 5 },
 };
 export const CIRCUIT_CHANCE = 0.3; // chance the roulette adds a circuit when unset
 export const CIRCUIT_SIZE = { min: 2, max: 5 };
