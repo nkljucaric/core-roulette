@@ -41,7 +41,7 @@ User-set inputs (settings screen, #19). Any input the user leaves unset is rando
 - Total workout time (default 10:00).
 - Work length per exercise and rest length, each a slider (defaults 40s work / 20s rest).
 - Warm-up on/off, and whether it counts inside the total time. Warm-up moves come from exercises flagged `warmup`.
-- Position filter (`back`, `face-down`) and focus filter (including `obliques`): any, all, or none.
+- Position filter (`back`, `face-down`, `other`) and focus filter (including `obliques`): any, all, or none.
 - Circuits: a group of exercises repeated for N rounds, shown on the preview screen as a bracket with a rounds badge (#20).
 
 Rules:
@@ -57,7 +57,7 @@ Rules:
 id            string, unique, kebab-case
 name          display name
 focus         array: "upper-abs" | "lower-abs" | "obliques" | "deep-core" | "full"
-position      "back" | "face-down" (exercises fitting neither: tagging rule TBD in #18)
+position      "back" | "face-down" | "other" (other = side, seated, all-fours, standing)
 warmup        "eligible" | "only" | omitted. "only" moves are excluded from the main pool
 pattern       "static" | "dynamic" | "rotational"
 difficulty    1 | 2 | 3
@@ -82,7 +82,7 @@ Before implementing an issue, use the `feature-scoper` subagent to have a short 
 
 ## Testing
 
-Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
+Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. One deliberate exception: `test/exercises.test.js` validates `exercises.json` (unique ids, valid enum values) to catch typos as the library grows. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
 
 ## Working agreements
 
@@ -96,4 +96,5 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 
 - 2026-10-12: M0 spike passed. Nick tested the deployed page on his iPhone and everything works (#1-#4). Verdict (#5): stay on the web/PWA path; Capacitor (#15) stays in `later`. M1+ is unblocked.
 - 2026-10-12: Workout is user-configurable instead of fixed 10:00 / 40s / 20s: total time, work and rest sliders, warm-up, position and focus filters, circuits. Unset inputs are randomized. Position is a new tag alongside focus (obliques stays a focus value). Warm-up moves come from the library via a `warmup` flag. Saved workouts need a backend and are parked for V2 (#21). Issues #18-#21.
+- 2026-10-12: Schema finalized in #6. `position` is `back` | `face-down` | `other` (every move has one; `other` covers side, seated, all-fours and standing moves). `warmup` is `eligible` | `only` | omitted. Starter library is 16 moves; the full library is authored in #18. Added `test/exercises.test.js` as a data-validation exception to the logic-only testing rule.
 - (add further dated entries here as decisions are made)
