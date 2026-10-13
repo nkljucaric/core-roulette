@@ -248,7 +248,7 @@
     "id": "bear-plank",
     "name": "Bear Plank",
     "focus": ["deep-core"],
-    "position": "other",
+    "position": "face-down",
     "pattern": "static",
     "difficulty": 2,
     "perSide": false,
