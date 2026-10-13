@@ -11,7 +11,7 @@
 //
 // Advanced: every control holds a concrete value. A circuit switch that is on
 // becomes an explicit circuit whose size and rounds are drawn here, from the
-// rng, each time options are built.
+// rng, each time options are built, from the sizes that fit the chosen times.
 //
 // sanitize() turns untrusted stored settings (parsed localStorage JSON) back
 // into a complete, valid settings object.
@@ -72,10 +72,29 @@ export function quickOptions(quick) {
   };
 }
 
+// Share of the total time a circuit may take. Mirrors the generator's own limit
+// for circuits it picks itself; an explicit circuit would be allowed to take far
+// more, but then most random picks would not fit and come back shrunk, with a
+// warning on the preview.
+const CIRCUIT_SHARE = 0.6;
+
+// A random circuit size and rounds that fit the time. If none fits, the smallest
+// circuit (the generator then drops it with a warning if it still cannot fit).
+function pickCircuit({ totalSeconds, workSeconds, restSeconds }, rng) {
+  const perMove = workSeconds + restSeconds;
+  const budget = CIRCUIT_SHARE * totalSeconds;
+  const fits = [];
+  for (let size = CIRCUIT_SIZE.min; size <= CIRCUIT_SIZE.max; size++) {
+    for (let rounds = CIRCUIT_ROUNDS.min; rounds <= CIRCUIT_ROUNDS.max; rounds++) {
+      if (size * rounds * perMove <= budget) fits.push({ size, rounds });
+    }
+  }
+  if (fits.length === 0) return { size: CIRCUIT_SIZE.min, rounds: CIRCUIT_ROUNDS.min };
+  return fits[Math.min(fits.length - 1, Math.floor(rng() * fits.length))];
+}
+
 export function advancedOptions(advanced, rng = Math.random) {
-  const circuit = advanced.circuit
-    ? { size: randInt(rng, CIRCUIT_SIZE.min, CIRCUIT_SIZE.max), rounds: randInt(rng, CIRCUIT_ROUNDS.min, CIRCUIT_ROUNDS.max) }
-    : null;
+  const circuit = advanced.circuit ? pickCircuit(advanced, rng) : null;
   return {
     totalSeconds: advanced.totalSeconds,
     workSeconds: advanced.workSeconds,

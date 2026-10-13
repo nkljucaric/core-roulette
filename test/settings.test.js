@@ -263,6 +263,26 @@ test("advancedOptions with circuit on returns { size, rounds }", () => {
   assert.deepEqual(Object.keys(opts.circuit).sort(), ["rounds", "size"]);
 });
 
+// The circuit is drawn only from {size, rounds} pairs that fit in 60% of the
+// total (the generator's AUTO_CIRCUIT_SHARE), so the generator never has to
+// shrink it. Enumerated independently of the implementation: size ascending,
+// then rounds ascending.
+const CIRCUIT_SHARE = 0.6;
+function feasiblePairs({ totalSeconds, workSeconds, restSeconds }) {
+  const perMove = workSeconds + restSeconds;
+  const budget = CIRCUIT_SHARE * totalSeconds;
+  const fits = [];
+  for (let size = 2; size <= 5; size++) {
+    for (let rounds = 2; rounds <= 4; rounds++) {
+      if (size * rounds * perMove <= budget) fits.push({ size, rounds });
+    }
+  }
+  return fits;
+}
+
+const ROOMY = { totalSeconds: 1200, workSeconds: 20, restSeconds: 5 };
+const NOTHING_FITS = { totalSeconds: 300, workSeconds: 60, restSeconds: 45 };
+
 test("advancedOptions circuit size is an integer in CIRCUIT_SIZE and rounds in CIRCUIT_ROUNDS", () => {
   for (const seed of seeds(200)) {
     const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
@@ -274,11 +294,34 @@ test("advancedOptions circuit size is an integer in CIRCUIT_SIZE and rounds in C
   }
 });
 
-test("advancedOptions circuit covers every size 2-5 and every rounds 2-4 across seeds", () => {
+test("advancedOptions circuit with the default 600/40/20 only ever fits 60% of the total (size x rounds x 60s <= 360s)", () => {
+  for (const seed of seeds(300)) {
+    const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+    assert.ok(size * rounds * 60 <= 360, `${size}x${rounds} (seed ${seed})`);
+  }
+});
+
+test("advancedOptions circuit with the default 600/40/20 produces exactly 2x2, 2x3 and 3x2 across seeds", () => {
+  const seen = new Set();
+  for (const seed of seeds(300)) {
+    const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+    seen.add(`${size}x${rounds}`);
+  }
+  assert.deepEqual([...seen].sort(), ["2x2", "2x3", "3x2"]);
+});
+
+test("advancedOptions circuit never offers a 4-round circuit when 2 moves x 4 rounds exceeds the budget", () => {
+  for (const seed of seeds(300)) {
+    const { rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+    assert.ok(rounds < 4, `rounds ${rounds} (seed ${seed})`);
+  }
+});
+
+test("advancedOptions circuit with a roomy config covers every size 2-5 and every rounds 2-4 across seeds", () => {
   const sizes = new Set();
   const rounds = new Set();
-  for (const seed of seeds(300)) {
-    const c = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+  for (const seed of seeds(400)) {
+    const c = advancedOptions(advancedState({ ...ROOMY, circuit: true }), mulberry32(seed)).circuit;
     sizes.add(c.size);
     rounds.add(c.rounds);
   }
@@ -286,14 +329,61 @@ test("advancedOptions circuit covers every size 2-5 and every rounds 2-4 across 
   assert.deepEqual([...rounds].sort(), [2, 3, 4]);
 });
 
-test("advancedOptions circuit hits the minimum when the rng always returns 0", () => {
-  const { circuit } = advancedOptions(advancedState({ circuit: true }), () => 0);
-  assert.deepEqual(circuit, { size: CIRCUIT_SIZE.min, rounds: CIRCUIT_ROUNDS.min });
+test("advancedOptions circuit with a roomy config always fits the budget", () => {
+  const perMove = ROOMY.workSeconds + ROOMY.restSeconds;
+  for (const seed of seeds(300)) {
+    const { size, rounds } = advancedOptions(advancedState({ ...ROOMY, circuit: true }), mulberry32(seed)).circuit;
+    assert.ok(size * rounds * perMove <= CIRCUIT_SHARE * ROOMY.totalSeconds, `${size}x${rounds} (seed ${seed})`);
+  }
 });
 
-test("advancedOptions circuit hits the maximum when the rng always returns just under 1", () => {
-  const { circuit } = advancedOptions(advancedState({ circuit: true }), () => 0.9999999);
-  assert.deepEqual(circuit, { size: CIRCUIT_SIZE.max, rounds: CIRCUIT_ROUNDS.max });
+test("advancedOptions circuit falls back to 2 moves x 2 rounds when nothing fits, without calling the rng", () => {
+  const rng = countingRng(4);
+  const { circuit } = advancedOptions(advancedState({ ...NOTHING_FITS, circuit: true }), rng);
+  assert.deepEqual(circuit, { size: 2, rounds: 2 });
+  assert.equal(rng.calls, 0);
+});
+
+test("advancedOptions circuit treats a pair that exactly equals the budget as fitting", () => {
+  // Default 600/40/20: budget 360s, and 3 moves x 2 rounds x 60s is exactly 360s.
+  const seen = new Set();
+  for (const seed of seeds(200)) {
+    const { size, rounds } = advancedOptions(advancedState({ circuit: true }), mulberry32(seed)).circuit;
+    seen.add(`${size}x${rounds}`);
+  }
+  assert.ok(seen.has("3x2"));
+});
+
+test("advancedOptions circuit picks the first feasible pair (size then rounds ascending) when the rng returns 0", () => {
+  const { circuit } = advancedOptions(advancedState({ ...ROOMY, circuit: true }), () => 0);
+  assert.deepEqual(circuit, feasiblePairs(ROOMY)[0]);
+  assert.deepEqual(circuit, { size: 2, rounds: 2 });
+});
+
+test("advancedOptions circuit picks the last feasible pair when the rng returns just under 1", () => {
+  const { circuit } = advancedOptions(advancedState({ ...ROOMY, circuit: true }), () => 0.9999999);
+  const fits = feasiblePairs(ROOMY);
+  assert.deepEqual(circuit, fits[fits.length - 1]);
+  assert.deepEqual(circuit, { size: 5, rounds: 4 });
+});
+
+test("advancedOptions circuit still picks the last feasible pair if the rng returns exactly 1", () => {
+  const { circuit } = advancedOptions(advancedState({ ...ROOMY, circuit: true }), () => 1);
+  assert.deepEqual(circuit, { size: 5, rounds: 4 });
+});
+
+test("advancedOptions circuit indexes the feasible pairs uniformly by the rng value", () => {
+  const fits = feasiblePairs(ROOMY);
+  assert.equal(fits.length, 12);
+  for (let i = 0; i < fits.length; i++) {
+    const { circuit } = advancedOptions(advancedState({ ...ROOMY, circuit: true }), () => (i + 0.5) / fits.length);
+    assert.deepEqual(circuit, fits[i], `index ${i}`);
+  }
+});
+
+test("advancedOptions circuit hits the first and last of the default feasible pairs at rng 0 and just under 1", () => {
+  assert.deepEqual(advancedOptions(advancedState({ circuit: true }), () => 0).circuit, { size: 2, rounds: 2 });
+  assert.deepEqual(advancedOptions(advancedState({ circuit: true }), () => 0.9999999).circuit, { size: 3, rounds: 2 });
 });
 
 test("advancedOptions is deterministic for a given seed", () => {
@@ -310,10 +400,12 @@ test("advancedOptions with circuit off never calls the rng", () => {
   assert.equal(rng.calls, 0);
 });
 
-test("advancedOptions with circuit on consumes the rng", () => {
-  const rng = countingRng(3);
-  advancedOptions(advancedState({ circuit: true }), rng);
-  assert.ok(rng.calls > 0);
+test("advancedOptions with circuit on and feasible pairs calls the rng exactly once", () => {
+  for (const config of [{}, ROOMY]) {
+    const rng = countingRng(3);
+    advancedOptions(advancedState({ ...config, circuit: true }), rng);
+    assert.equal(rng.calls, 1);
+  }
 });
 
 test("advancedOptions works without an rng argument when circuit is off", () => {
@@ -1120,6 +1212,41 @@ test("Advanced with circuit on generates a circuit within the rolled size and ro
     }
   }
   assert.ok(seen > 0);
+});
+
+const wasReduced = (w) => w.warnings.some((m) => m.startsWith("The circuit was reduced"));
+
+test("Advanced circuit on at 10:00 / 40s / 20s is almost never reduced by the generator and almost always appears", () => {
+  const runs = 300;
+  let reduced = 0;
+  let withCircuit = 0;
+  for (const seed of seeds(runs)) {
+    const rng = mulberry32(seed);
+    const state = advancedState({ ...DEFAULTS.advanced, circuit: true });
+    const w = generateWorkout(library, advancedOptions(state, rng), rng);
+    if (wasReduced(w)) reduced++;
+    if (w.blocks.some((b) => b.kind === "circuit")) withCircuit++;
+  }
+  assert.equal(reduced, 0, `${reduced}/${runs} workouts were reduced`);
+  assert.ok(withCircuit >= runs * 0.95, `circuit block in ${withCircuit}/${runs} runs`);
+});
+
+test("Advanced circuit on with a counted warm-up at 15:00 / 40s / 20s is rarely reduced by the generator", () => {
+  const runs = 300;
+  let free = 0;
+  for (const seed of seeds(runs)) {
+    const rng = mulberry32(seed);
+    const state = advancedState({
+      totalSeconds: 900,
+      workSeconds: 40,
+      restSeconds: 20,
+      warmup: { enabled: true, countsInTotal: true },
+      circuit: true,
+    });
+    const w = generateWorkout(library, advancedOptions(state, rng), rng);
+    if (!wasReduced(w)) free++;
+  }
+  assert.ok(free >= runs * 0.9, `${free}/${runs} workouts free of a "reduced" warning`);
 });
 
 test("Advanced default state generates exactly 10:00 at 40s work and 20s rest", () => {

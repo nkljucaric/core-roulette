@@ -25,18 +25,18 @@ A personal PWA that builds and runs randomized 10-minute core workouts. One user
 Keep three layers cleanly separated:
 
 1. **Data:** `exercises.json`. No logic.
-2. **Logic:** pure functions (`generator`, `timer` engine). No DOM, no audio. Unit-testable.
+2. **Logic:** pure functions (`generator`, `reroll`, `timer` engine, `settings`). No DOM, no audio. Unit-testable.
 3. **Shell:** UI, audio, wake lock. Thin. This is the only layer that changes if we later wrap with Capacitor for native audio session, haptics, and keep-awake.
 
 ## Stack decisions
 
-- Static PWA, plain JS modules (or a very light framework if the feature list demands it; decide at start of M1).
+- Static PWA, plain JS modules, no build step (decided 2026-10-13). `index.html` is the app, `src/ui/` is the Shell, and the M0 spike page lives on at `/spike.html`. `exercises.json` is loaded with `fetch` (iOS 16.4 has no JSON import attributes). System fonts only, so nothing downloads and the app works offline.
 - Hosting: Vercel (free). HTTPS preview URLs are used for iPhone testing.
 - No database. No API keys.
 
 ## Generator settings and defaults (tentative, tune after real use)
 
-User-set inputs (settings screen, #19). Any input the user leaves unset is randomized ("true roulette"):
+The settings screen (#19) has two modes. **Quick Start** (the default): total time, Easy / Medium / Hard (max difficulty 1 / 2 / 3, so Hard is "up to hard"), warm-up on/off (counted in the total); work, rest and circuit are left unset so they re-randomize on every generate and re-roll. **Advanced** has a Randomize button at the top that fills every control with random visible values (filters cleared), plus the inputs below. Any input left unset is randomized ("true roulette"):
 
 - Total workout time (default 10:00).
 - Work length per exercise and rest length, each a slider (defaults 40s work / 20s rest).
@@ -85,7 +85,7 @@ Before implementing an issue, use the `feature-scoper` subagent to have a short 
 
 ## Testing
 
-Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `reroll.js`, `timer.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. One deliberate exception: `test/exercises.test.js` validates `exercises.json` (unique ids, valid enum values) to catch typos as the library grows. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
+Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), tests in `test/`, one file per source module. Tests target the pure Logic layer only (`generator.js`, `reroll.js`, `timer.js`, `settings.js`) — not the Shell layer (audio, DOM, wake lock), which can't be meaningfully unit tested. One deliberate exception: `test/exercises.test.js` validates `exercises.json` (unique ids, valid enum values) to catch typos as the library grows. Use the `test-runner` subagent to write tests for new features or check suite status before a push.
 
 ## Working agreements
 
@@ -107,4 +107,5 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 - 2026-10-13: Library grown from 16 to 35 moves (#18, first batch; the issue stays open for more). Authored in a spreadsheet (one row per move, dropdowns for the enums, an `x` per focus, Include? Y/N) and converted to `exercises.json`, so the JSON stays the source of truth and the sheet is an editing tool. Nick's edits: bicycle-crunch is difficulty 2; russian-twist is `back`; bird-dog, cat-cow and bear-plank are `face-down`; he dropped three of the suggested moves and added windshield-wiper, cross-body-crunch, single-leg-bicycle, sit-up and plank-walk. Main pool is 29 moves, warm-up pool 10 (6 warm-up only). Form cues for sit-up, plank-walk and the three added rotational moves were tidied by Claude. `test/reroll.test.js` no longer asserts that a no-op re-roll occurs in the real library, because that depended on the library being small (no-alternative is covered with synthetic libraries). Idea parked in #28: rate every move 1-10.
 - 2026-10-13: Position `other` removed. `position` is now `back` | `face-down` | `side` | `standing` (#18). All-fours moves are `face-down` (bird-dog, cat-cow, bear-plank, reach-through); side-plank and side-plank-hip-dips are `side`; wood-chop, standing-torso-twist, standing-knee-to-elbow and inchworm are `standing`. This supersedes the 2026-10-12 schema entry's definition of `other`. Main pool by position: back 15, face-down 11, side 2, standing 1, so the side and standing filters need more moves before they are useful (they hit the repeat-with-warning path today).
 - 2026-10-13: Six side and standing moves added (#18): side-lying-leg-raise, side-crunch, side-plank-reach-through, side-plank-leg-lift, standing-oblique-crunch, standing-side-bend (warm-up eligible). Nick cut the suggested standing-crunch and standing-windmill. Library is 41 moves: main pool 35 (back 15, face-down 11, side 6, standing 3), warm-up pool 11 (6 warm-up only). Standing is still thin; flipping standing-torso-twist and standing-knee-to-elbow from `only` to `eligible` would add two more. The generator's "too few moves" tests now use a synthetic library, since the real one no longer forces that path for a side-only filter.
+- 2026-10-13: Settings screen (#19) built. Two modes, Quick Start and Advanced (see Generator settings). Stack decided: plain JS modules, no build step. New pure `src/settings.js` turns screen state into `generateWorkout` options (Quick Start omits work, rest and circuit; Advanced sends concrete values), implements Randomize, and sanitizes stored settings; 242 tests. Settings persist in `localStorage` (try/catch) under `core-roulette.settings.v1`. Generate opens a bare preview (plain list, whole-workout re-roll that rebuilds options from the settings, never from the resolved options); #20 replaces it. In Advanced the circuit switch sends an explicit circuit whose size and rounds the Shell picks so that size x rounds x (work + rest) is at most 60% of the total (the generator's own limit for circuits it picks); picking blindly got a "circuit was reduced" warning on 59% of workouts. If nothing fits it sends 2 x 2 and the generator may drop it with a warning. Warm-up stays fixed at 2 easy moves. The M0 spike page moved to `/spike.html`. Slider ranges (tentative): total 5:00-20:00 by 1:00, work 20-60 s and rest 5-45 s by 5 s.
 - (add further dated entries here as decisions are made)

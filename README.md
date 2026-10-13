@@ -18,22 +18,33 @@ A personal web app (PWA) that generates a randomized 10-minute core workout and 
 
 ## Status
 
-M0 (iPhone spike) complete — tested on a real iPhone and working, so we're staying on the web/PWA path. Next up is M1 (exercise library and generator). See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
+M0 (iPhone spike) is complete, so we're staying on the web/PWA path. The logic layer is done and tested: library (41 moves), generator, re-roll, timer engine and settings. The settings screen (Quick Start and Advanced) and a bare workout preview are built; the runner, audio, install and offline support come next. See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
 
 ## Running locally
 
-Not set up yet. Milestone 0 (the iPhone audio spike) will establish the dev and deploy flow. The app must be reachable over HTTPS (Vercel preview URLs work) to test audio session, wake lock, and home-screen install on an iPhone.
+No build step and no dependencies. Serve the folder over HTTP (the app loads `exercises.json` with `fetch`, so opening the file directly won't work):
 
-## Repo layout (planned)
+```
+python3 -m http.server 8000     # then open http://localhost:8000
+node --test                     # run the tests
+```
+
+Audio, wake lock and home-screen install must be tested on a real iPhone over HTTPS (Vercel preview URLs work). The original M0 spike page is kept at `/spike.html`.
+
+## Repo layout
 
 ```
 /
+  index.html         the app
+  spike.html         M0 audio / wake-lock spike (kept for reference)
   README.md
   CLAUDE.md          project brief and decisions for Claude Code
   exercises.json     exercise library (data, no logic)
   src/
     generator.js     pure functions: build a workout from the library
+    reroll.js        pure function: replace one move in a workout
     timer.js         timestamp-based interval engine
-    audio.js         beeps and optional speech, audio session handling
-    ui/              thin presentation layer
+    settings.js      pure functions: settings screen state -> generator options
+    ui/              thin presentation layer (screens, storage, styles)
+  test/              node --test, Logic layer only (plus exercises.json validation)
 ```
