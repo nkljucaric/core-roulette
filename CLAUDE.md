@@ -34,12 +34,22 @@ Keep three layers cleanly separated:
 - Hosting: Vercel (free). HTTPS preview URLs are used for iPhone testing.
 - No database. No API keys.
 
-## Generator defaults (tentative, tune after real use)
+## Generator settings and defaults (tentative, tune after real use)
 
-- Total length 10:00. Default interval 40s work / 20s rest, so about 10 slots.
+User-set inputs (settings screen, #19). Any input the user leaves unset is randomized ("true roulette"):
+
+- Total workout time (default 10:00).
+- Work length per exercise and rest length, each a slider (defaults 40s work / 20s rest).
+- Warm-up on/off, and whether it counts inside the total time. Warm-up moves come from exercises flagged `warmup`.
+- Position filter (`back`, `face-down`) and focus filter (including `obliques`): any, all, or none.
+- Circuits: a group of exercises repeated for N rounds, shown on the preview screen as a bracket with a rounds badge (#20).
+
+Rules:
+
 - `perSide` exercises count as two half-slots (swap sides mid-slot with a clear on-screen/beep cue).
-- Rules: no repeat of the same `focus` back-to-back; mix `pattern` (static / dynamic / rotational); respect difficulty setting; no exercise repeated within one workout.
-- "Re-roll" replaces the whole workout or a single slot.
+- No repeat of the same `focus` back-to-back; mix `pattern` (static / dynamic / rotational); respect difficulty setting.
+- No exercise repeated within one workout, except circuit rounds.
+- "Re-roll" replaces the whole workout or a single slot, on the preview screen before the workout starts.
 
 ## Exercise schema (`exercises.json`)
 
@@ -47,6 +57,8 @@ Keep three layers cleanly separated:
 id            string, unique, kebab-case
 name          display name
 focus         array: "upper-abs" | "lower-abs" | "obliques" | "deep-core" | "full"
+position      "back" | "face-down" (exercises fitting neither: tagging rule TBD in #18)
+warmup        "eligible" | "only" | omitted. "only" moves are excluded from the main pool
 pattern       "static" | "dynamic" | "rotational"
 difficulty    1 | 2 | 3
 perSide       boolean
@@ -83,4 +95,5 @@ Node's built-in test runner (`node --test`, no Jest/Vitest — don't add one), t
 ## Decisions log
 
 - 2026-10-12: M0 spike passed. Nick tested the deployed page on his iPhone and everything works (#1-#4). Verdict (#5): stay on the web/PWA path; Capacitor (#15) stays in `later`. M1+ is unblocked.
+- 2026-10-12: Workout is user-configurable instead of fixed 10:00 / 40s / 20s: total time, work and rest sliders, warm-up, position and focus filters, circuits. Unset inputs are randomized. Position is a new tag alongside focus (obliques stays a focus value). Warm-up moves come from the library via a `warmup` flag. Saved workouts need a backend and are parked for V2 (#21). Issues #18-#21.
 - (add further dated entries here as decisions are made)
