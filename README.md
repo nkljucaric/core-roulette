@@ -18,7 +18,7 @@ A personal web app (PWA) that generates a randomized 10-minute core workout and 
 
 ## Status
 
-M0 (iPhone spike) is complete, so we're staying on the web/PWA path. The logic layer is done and tested: library (41 moves), generator, re-roll, timer engine and settings. The settings screen (Quick Start and Advanced) and the workout preview (time windows, collapsed circuits, rest lines) are built; the runner, audio, install and offline support come next. See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
+M0 (iPhone spike) is complete, so we're staying on the web/PWA path. The logic layer is done and tested: library (41 moves), generator, re-roll, timer engine and settings. The settings screen (Quick Start and Advanced), the workout preview (time windows, collapsed circuits, rest lines) and the runner (countdown, pause, done screen) are built; audio, wake lock, install and offline support come next. See this repo's GitHub Issues for milestones and `CLAUDE.md` for project context and decisions.
 
 ## Running locally
 
@@ -46,6 +46,7 @@ Audio, wake lock and home-screen install must be tested on a real iPhone over HT
     timer.js         timestamp-based interval engine
     settings.js      pure functions: settings screen state -> generator options
     preview.js       pure functions: workout -> rows for the preview screen
+    runner.js        pure functions: timer view -> labels for the runner screen
     ui/              thin presentation layer (screens, storage, styles)
   test/              node --test, Logic layer only (plus exercises.json validation)
 ```

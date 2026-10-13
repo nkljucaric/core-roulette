@@ -250,10 +250,9 @@ input[type="range"] { width: 100%; height: 44px; margin: 4px 0 0; accent-color: 
 .badge { background: var(--accent); color: var(--accent-ink); font: 700 0.95rem/1 var(--display); padding: 6px 12px; border-radius: 999px; }
 .circuit-foot { margin: 6px 0 2px; }
 
-/* Preview action bar: Start on top, hint, then the two secondary actions */
-.tall-bar { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 220px); }
+/* Preview action bar: Start on top, then the two secondary actions */
+.tall-bar { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 160px); }
 .btn:disabled { opacity: 0.45; }
-.bar-hint { margin: 0; text-align: center; background: var(--bg); }
 .bar-row { display: flex; gap: 8px; }
 .bar-row .btn { flex: 1; width: auto; }
 
@@ -261,4 +260,84 @@ input[type="range"] { width: 100%; height: 44px; margin: 4px 0 0; accent-color: 
 button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .knob, .knob::after { transition: none; }
+}
+
+/* Runner (#10): full-bleed phase color, no scrolling. The colors are fixed (not
+   themed) so the numbers stay readable from across the room; the phase label is
+   always spelled out, so color is never the only signal. */
+[hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.runner {
+  --r-bg: #475569;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  max-width: 30rem;
+  margin: 0 auto;
+  background: var(--r-bg);
+  color: #fff;
+  transition: background-color 0.25s ease;
+}
+.runner[data-phase="work"] { --r-bg: #0b7a4b; }
+.runner[data-phase="rest"] { --r-bg: #1d4ed8; }
+.runner[data-phase="ready"] { --r-bg: #475569; }
+/* The page behind the centered column takes the same color. */
+body:has(.runner) { background: #0c1220; }
+
+.r-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.r-phase { font: 800 1.25rem/1 var(--display); letter-spacing: 0.12em; }
+.r-section { font-size: 0.95rem; font-weight: 600; opacity: 0.85; text-align: right; }
+
+.r-clock {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  font: 800 min(44vw, 15rem)/1 var(--display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.r-progress { display: flex; align-items: center; gap: 12px; }
+.r-bar { flex: 1; height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.28); overflow: hidden; }
+.r-fill { height: 100%; width: 100%; background: #fff; transform: scaleX(0); transform-origin: left; border-radius: 999px; }
+.r-total { font: 600 0.95rem/1 var(--display); font-variant-numeric: tabular-nums; opacity: 0.9; white-space: nowrap; }
+
+.r-move { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; }
+.r-side { align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); font-weight: 700; font-size: 0.95rem; }
+.r-title { margin: 0; font: 700 clamp(1.9rem, 8vw, 2.6rem)/1.1 var(--display); letter-spacing: -0.01em; }
+.r-cue { margin: 0; font-size: 1.05rem; opacity: 0.9; }
+
+.r-next { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: var(--radius); background: rgba(0, 0, 0, 0.22); }
+.r-next-caption { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.8; }
+.r-next-text { font-size: 1.15rem; font-weight: 600; }
+
+.r-actions { padding-top: 4px; }
+.btn.r-pause { background: rgba(255, 255, 255, 0.2); color: #fff; border-color: rgba(255, 255, 255, 0.55); min-height: 60px; font-size: 1.2rem; }
+.btn.r-pause:active { background: rgba(255, 255, 255, 0.32); }
+
+.r-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+  background: rgba(8, 12, 22, 0.92);
+}
+.r-paused-label { margin: 0; text-align: center; font: 800 2.4rem/1 var(--display); letter-spacing: 0.1em; text-transform: uppercase; }
+.r-overlay-body { display: flex; flex-direction: column; gap: 12px; }
+.r-confirm-text { margin: 0; text-align: center; font-size: 1.2rem; font-weight: 600; }
+.r-overlay .btn.secondary { color: #fff; border-color: rgba(255, 255, 255, 0.6); }
+.r-overlay .btn.primary { background: #fff; color: #0c1220; }
+
+@media (prefers-reduced-motion: reduce) {
+  .runner { transition: none; }
 }
