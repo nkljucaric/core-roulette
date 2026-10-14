@@ -25,8 +25,6 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
   let last = null;
 
   // --- DOM (built once; ticks only change text and attributes) ---
-  const phaseEl = h("span", { class: "r-phase" });
-  const sectionEl = h("span", { class: "r-section" });
   const clockEl = h("div", { class: "r-clock", "aria-hidden": "true" });
   const fillEl = h("div", { class: "r-fill" });
   const barEl = h("div", { class: "r-bar", role: "progressbar", "aria-label": "Workout progress", "aria-valuemin": 0, "aria-valuemax": 100 }, fillEl);
@@ -53,10 +51,9 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
   );
 
   const el = h("main", { class: "runner", "data-phase": "ready" },
-    h("div", { class: "r-top" }, phaseEl, sectionEl),
+    h("div", { class: "r-move" }, sideEl, titleEl, cueEl),
     clockEl,
     h("div", { class: "r-progress" }, barEl, totalEl),
-    h("div", { class: "r-move" }, sideEl, titleEl, cueEl),
     nextEl,
     h("div", { class: "r-actions" }, pauseBtn),
     overlay,
@@ -72,8 +69,6 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
   function render(d) {
     el.dataset.phase = d.phase;
     el.classList.toggle("is-paused", d.paused);
-    setText(phaseEl, d.phaseLabel);
-    setText(sectionEl, d.sectionLabel);
     setText(clockEl, formatClock(d.phaseRemainingSec));
     fillEl.style.transform = `scaleX(${d.progress.toFixed(4)})`;
     barEl.setAttribute("aria-valuenow", String(Math.round(d.progress * 100)));
@@ -83,7 +78,7 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
     setText(titleEl, d.title);
     setText(cueEl, d.formCue);
     cueEl.hidden = !d.formCue;
-    nextEl.hidden = !d.upNext;
+    nextEl.style.visibility = d.upNext ? "visible" : "hidden"; // keeps its space so the clock does not jump between phases
     if (d.upNext) {
       setText(nextTextEl, d.upNext.text);
       nextCaptionEl.hidden = d.upNext.kind !== "move";
