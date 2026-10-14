@@ -10,7 +10,8 @@
 // Sound plan (Nick's spec): in a work interval, two quick beeps ("double") at
 // 10 s to go, a "short" beep at 3 and at 2, and a "long" beep at 1. Rest and
 // get-ready get only the "long" beep at 1. Nothing sounds on the transition
-// itself. "chirp" is played by the Shell on the Start tap, never from events.
+// itself. "finish" is a rising four-note jingle on the `done` event. "chirp" is
+// played by the Shell on the Start tap, never from events.
 
 export const STALE_AFTER_SEC = 1.5;
 export const DEFAULT_AUDIO_PREFS = Object.freeze({ muted: false });
@@ -23,9 +24,10 @@ export function sanitizeAudioPrefs(stored) {
 }
 
 // Higher wins when one tick returns several fresh sounds.
-const PRIORITY = { long: 3, double: 2, short: 1 };
+const PRIORITY = { finish: 4, long: 3, double: 2, short: 1 };
 
 function soundOf(event) {
+  if (event.type === "done") return "finish";
   if (event.type === "warning") return "double";
   if (event.type === "countdown") {
     if (event.n === 1) return "long";
@@ -65,6 +67,13 @@ const TONES = {
   double: [
     { freq: HEADS_UP, startSec: 0, durSec: 0.1, gain: 0.45 },
     { freq: HEADS_UP, startSec: 0.18, durSec: 0.1, gain: 0.45 },
+  ],
+  // C major arpeggio, C5 E5 G5 C6; the last note rings out (`decay`).
+  finish: [
+    { freq: 523.25, startSec: 0, durSec: 0.16, gain: 0.4 },
+    { freq: 659.25, startSec: 0.16, durSec: 0.16, gain: 0.4 },
+    { freq: 783.99, startSec: 0.32, durSec: 0.16, gain: 0.4 },
+    { freq: 1046.5, startSec: 0.48, durSec: 0.7, gain: 0.4, decay: true },
   ],
   chirp: [
     { freq: 523, startSec: 0, durSec: 0.1, gain: 0.4 },

@@ -60,10 +60,11 @@ export function play(soundId) {
       const gain = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = note.freq;
-      // Quick attack, hold, quick release: no clicks, and long beeps stay level.
+      // Quick attack, then either a level hold with a quick release (beeps stay
+      // even, no clicks) or, for `decay` notes, a ring-out across the whole note.
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.exponentialRampToValueAtTime(note.gain, start + 0.01);
-      gain.gain.setValueAtTime(note.gain, Math.max(start + 0.01, end - 0.04));
+      if (!note.decay) gain.gain.setValueAtTime(note.gain, Math.max(start + 0.01, end - 0.04));
       gain.gain.exponentialRampToValueAtTime(0.0001, end);
       osc.connect(gain).connect(ctx.destination);
       osc.start(start);
