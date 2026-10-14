@@ -141,11 +141,15 @@ test("cuesFor: countdown 1 plays the long beep in work, rest and get-ready", () 
   }
 });
 
-test("cuesFor: ready, work-start, side-swap, rest-start and done make no sound", () => {
-  const silent = [ev.ready(10), ev.work(10), ev.swap(10), ev.rest(10), ev.done(10)];
+test("cuesFor: ready, work-start, side-swap and rest-start make no sound", () => {
+  const silent = [ev.ready(10), ev.work(10), ev.swap(10), ev.rest(10)];
   for (const e of silent) {
     assert.deepEqual(cues([e], 10), { sound: null, dropped: 0 }, e.type);
   }
+});
+
+test("cuesFor: the done event plays the finish jingle", () => {
+  assert.deepEqual(cues([ev.done(600)], 600), { sound: "finish", dropped: 0 });
 });
 
 test("cuesFor: chirp is never chosen from events", () => {
@@ -171,13 +175,21 @@ test("cuesFor: an event 1.51 s old is dropped and counted", () => {
 });
 
 test("cuesFor: a sound-less stale event is ignored, not counted as dropped", () => {
-  assert.deepEqual(cues([ev.rest(10), ev.work(10), ev.done(10)], 60), { sound: null, dropped: 0 });
+  assert.deepEqual(cues([ev.rest(10), ev.work(10), ev.swap(10)], 60), { sound: null, dropped: 0 });
   assert.deepEqual(cues([ev.cd(10, 3, "rest")], 60), { sound: null, dropped: 0 });
 });
 
 test("cuesFor: several stale sound events are all counted", () => {
   const events = [ev.warn(10), ev.cd(17, 3), ev.cd(18, 2), ev.cd(19, 1)];
   assert.deepEqual(cues(events, 40), { sound: null, dropped: 4 });
+});
+
+test("cuesFor: a done event exactly 1.5 s old still plays the finish jingle", () => {
+  assert.deepEqual(cues([ev.done(600)], 601.5), { sound: "finish", dropped: 0 });
+});
+
+test("cuesFor: a stale done event is dropped and counted", () => {
+  assert.deepEqual(cues([ev.done(600)], 601.51), { sound: null, dropped: 1 });
 });
 
 test("cuesFor: a stale event does not block a fresh lower-priority one", () => {
@@ -208,6 +220,26 @@ test("cuesFor: with equal priority only one sound plays and the other fresh one 
   assert.deepEqual(cues([ev.cd(10, 1, "rest"), ev.cd(10.5, 1, "work")], 11), { sound: "long", dropped: 1 });
 });
 
+test("cuesFor: finish beats a countdown 1 long beep in the same batch", () => {
+  assert.deepEqual(cues([ev.cd(599, 1), ev.done(600)], 600), { sound: "finish", dropped: 1 });
+});
+
+test("cuesFor: finish beats every other sound regardless of event order", () => {
+  const others = [ev.cd(599.2, 3), ev.cd(599.5, 2), ev.cd(599.8, 1), ev.warn(599.9)];
+  const forward = cues([...others, ev.done(600)], 600);
+  const backward = cues([ev.done(600), ...others.reverse()], 600);
+  assert.deepEqual(forward, { sound: "finish", dropped: 4 });
+  assert.deepEqual(backward, forward);
+});
+
+test("cuesFor: a fresh finish is not blocked by stale events before it", () => {
+  assert.deepEqual(cues([ev.cd(10, 1), ev.done(600)], 600), { sound: "finish", dropped: 1 });
+});
+
+test("cuesFor: a stale done does not outrank a fresh long beep", () => {
+  assert.deepEqual(cues([ev.done(10), ev.cd(19.6, 1)], 20), { sound: "long", dropped: 1 });
+});
+
 test("cuesFor: every superseded fresh sound event and every stale one is counted", () => {
   const events = [ev.warn(1), ev.cd(18.8, 3), ev.cd(19.2, 2), ev.cd(19.6, 1)];
   // The warning is stale at 20; the two shorts are superseded by the long.
@@ -215,7 +247,7 @@ test("cuesFor: every superseded fresh sound event and every stale one is counted
 });
 
 test("cuesFor: sound-less events mixed in with sound events are not counted", () => {
-  const events = [ev.rest(19.5), ev.cd(19.6, 1), ev.work(19.7), ev.done(19.8)];
+  const events = [ev.rest(19.5), ev.cd(19.6, 1), ev.work(19.7), ev.swap(19.8)];
   assert.deepEqual(cues(events, 20), { sound: "long", dropped: 0 });
 });
 
@@ -238,6 +270,11 @@ test("cuesFor: muted plays nothing and reports nothing dropped", () => {
 
 test("cuesFor: muted also reports nothing dropped for stale events", () => {
   assert.deepEqual(cuesFor([ev.cd(1, 1), ev.warn(2)], { positionSec: 60, prefs: MUTED }), { sound: null, dropped: 0 });
+});
+
+test("cuesFor: muted plays no finish jingle and reports nothing dropped", () => {
+  assert.deepEqual(cuesFor([ev.done(600)], { positionSec: 600, prefs: MUTED }), { sound: null, dropped: 0 });
+  assert.deepEqual(cuesFor([ev.cd(599, 1), ev.done(600)], { positionSec: 600, prefs: MUTED }), { sound: null, dropped: 0 });
 });
 
 test("cuesFor: unmuting makes the very same batch audible again", () => {
@@ -264,7 +301,7 @@ test("cuesFor: the same inputs always give the same answer", () => {
 // toneFor
 // ===========================================================================
 
-const SOUND_IDS = ["double", "short", "long", "chirp"];
+const SOUND_IDS = ["double", "short", "long", "chirp", "finish"];
 
 test("toneFor: an unknown id gives null", () => {
   for (const bad of [undefined, null, "", "boop", "SHORT", "toString", "constructor", "__proto__", 3, {}]) {
@@ -300,8 +337,44 @@ test("toneFor: totalSec equals the end of the last note", () => {
   }
 });
 
-test("toneFor: every tone ends before the next one-second tick", () => {
-  for (const id of SOUND_IDS) assert.ok(toneFor(id).totalSec < 0.6, id);
+test("toneFor: every tone except finish ends before the next one-second tick", () => {
+  for (const id of SOUND_IDS.filter((x) => x !== "finish")) assert.ok(toneFor(id).totalSec < 0.6, id);
+});
+
+test("toneFor: finish is 4 notes, a rising arpeggio (strictly ascending start times and pitches)", () => {
+  const { notes } = toneFor("finish");
+  assert.equal(notes.length, 4);
+  for (let i = 1; i < notes.length; i++) {
+    assert.ok(notes[i].startSec > notes[i - 1].startSec, `startSec ${i}`);
+    assert.ok(notes[i].freq > notes[i - 1].freq, `freq ${i}`);
+  }
+});
+
+test("toneFor: finish lasts between 0.9 s and 1.5 s in total", () => {
+  const t = toneFor("finish");
+  assert.ok(t.totalSec >= 0.9 && t.totalSec <= 1.5, `totalSec ${t.totalSec}`);
+});
+
+test("toneFor: the last finish note is the longest and the only one that rings out (decay)", () => {
+  const { notes } = toneFor("finish");
+  const last = notes.at(-1);
+  for (const n of notes.slice(0, -1)) {
+    assert.ok(last.durSec > n.durSec, `last ${last.durSec} vs ${n.durSec}`);
+    assert.ok(!n.decay, "earlier notes do not set decay");
+  }
+  assert.equal(last.decay, true);
+});
+
+test("toneFor: no finish note uses the 880 Hz beep pitch", () => {
+  const beep = toneFor("short").notes[0].freq;
+  assert.equal(beep, 880);
+  for (const n of toneFor("finish").notes) assert.notEqual(n.freq, beep);
+});
+
+test("toneFor: no other tone sets decay", () => {
+  for (const id of SOUND_IDS.filter((x) => x !== "finish")) {
+    for (const n of toneFor(id).notes) assert.ok(!n.decay, id);
+  }
 });
 
 test("toneFor: short is a single note under 0.25 s", () => {
@@ -376,11 +449,12 @@ function runs(seedCount = 10) {
 // cues.js so the integration tests do not just restate the implementation.
 const soundOfEvent = (e) => {
   if (e.type === "warning") return "double";
+  if (e.type === "done") return "finish";
   if (e.type !== "countdown") return null;
   if (e.n === 1) return "long";
   return e.phase === "work" ? "short" : null;
 };
-const RANK = { long: 3, double: 2, short: 1 };
+const RANK = { finish: 4, long: 3, double: 2, short: 1 };
 
 // Expected sounds for a whole run from the workout's slot lengths alone.
 function expectedSounds(workout, leadInSec = 5) {
@@ -396,6 +470,7 @@ function expectedSounds(workout, leadInSec = 5) {
     const next = slots[i + 1];
     if (next && next.startSec - s.endSec > 1) out.push({ pos: next.startSec - 1, sound: "long" });
   });
+  if (slots.length) out.push({ pos: slots.at(-1).endSec, sound: "finish" });
   return out.sort((a, b) => a.pos - b.pos);
 }
 
@@ -467,6 +542,24 @@ test("integration: no tick that should sound is silent, and the full sequence ma
   }
 });
 
+test("integration: finish is the last sound of a full run and plays exactly once", () => {
+  for (const { label, workout, plan } of runs()) {
+    const sounds = soundsOf(plan);
+    assert.equal(sounds.at(-1).sound, "finish", label);
+    assert.equal(sounds.at(-1).pos, workout.slots.at(-1).endSec, label);
+    assert.equal(sounds.filter((t) => t.sound === "finish").length, 1, label);
+  }
+});
+
+test("integration: the last long beep comes at least 0.9 s before finish so they never overlap", () => {
+  for (const { label, plan } of runs()) {
+    const sounds = soundsOf(plan);
+    const finish = sounds.find((t) => t.sound === "finish");
+    const lastLong = sounds.filter((t) => t.sound === "long").at(-1);
+    assert.ok(finish.pos - lastLong.pos >= 0.9, `${label}: gap ${finish.pos - lastLong.pos}`);
+  }
+});
+
 test("integration: at a 100 ms cadence nothing is ever dropped and no tick returns more than one sound", () => {
   for (const { label, plan } of runs(4)) {
     for (const t of run100(plan)) {
@@ -494,8 +587,9 @@ test("integration: one giant tick over the whole workout yields at most one fres
     const r = tick(plan, start(plan, T0), farMs(plan));
     const c = cuesFor(r.events, { positionSec: r.view.positionSec, prefs: UNMUTED });
     assert.equal(r.view.positionSec, plan.durationSec, label);
-    // Only the final long beep (1 s before the end) is still fresh.
-    assert.equal(c.sound, "long", label);
+    // Only the final long beep (1 s before the end) and the finish are still
+    // fresh, and finish wins.
+    assert.equal(c.sound, "finish", label);
     assert.equal(c.dropped, expectedSounds(workout, plan.leadInSec).length - 1, label);
     assert.deepEqual(c, oracle(r.events, r.view.positionSec), label);
   }
