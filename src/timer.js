@@ -22,7 +22,8 @@
 //
 // Event types: ready, work-start, side-swap (replaces work-start at the
 // left-to-right boundary of a two-sided move), rest-start, countdown (n = 3, 2, 1
-// for the phase that is ending), done. A warm-up slot with side "alternate" is a
+// for the phase that is ending), warning (n = 10, work intervals longer than 10 s
+// only), done. A warm-up slot with side "alternate" is a
 // single window: it gets a plain work-start and never a side-swap.
 
 const MS = 1000;
@@ -32,7 +33,8 @@ const toMs = (sec) => Math.round(sec * MS);
 // Plan
 // ---------------------------------------------------------------------------
 
-const EVENT_RANK = { ready: 0, "work-start": 0, "side-swap": 0, "rest-start": 0, countdown: 1, done: 2 };
+const EVENT_RANK = { ready: 0, "work-start": 0, "side-swap": 0, "rest-start": 0, countdown: 1, warning: 1, done: 2 };
+const WARNING_SEC = 10;
 
 function buildEvents(slots, segments, durationSec) {
   const events = [];
@@ -62,6 +64,10 @@ function buildEvents(slots, segments, durationSec) {
       if (at > seg.startSec) {
         events.push({ type: "countdown", at, n, phase: seg.phase, slotIndex: seg.slotIndex });
       }
+    }
+    // A heads-up 10 s before a work interval ends, only strictly inside it.
+    if (seg.phase === "work" && seg.endSec - WARNING_SEC > seg.startSec) {
+      events.push({ type: "warning", at: seg.endSec - WARNING_SEC, n: WARNING_SEC, phase: "work", slotIndex: seg.slotIndex });
     }
   }
   events.push({ type: "done", at: durationSec, slotIndex: slots.length - 1 });
@@ -160,6 +166,7 @@ function buildView(plan, state, elapsedMs) {
       phaseDurationSec: 0,
       totalRemainingSec: 0,
       elapsedSec: durationSec,
+      positionSec: durationSec,
       next: null,
       nextIsSideSwap: false,
     };
@@ -184,6 +191,8 @@ function buildView(plan, state, elapsedMs) {
     phaseDurationSec: seg.endSec - seg.startSec,
     totalRemainingSec: Math.ceil((endMs - Math.max(0, elapsedMs)) / MS),
     elapsedSec: Math.min(durationSec, Math.max(0, elapsedMs / MS)),
+    // Signed workout time: negative during the get-ready lead-in.
+    positionSec: Math.min(durationSec, elapsedMs / MS),
     next,
     nextIsSideSwap: Boolean(slot && next && next.side === "right" && next.exerciseId === slot.exerciseId),
   };

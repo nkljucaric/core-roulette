@@ -159,8 +159,9 @@ function advancedPanel(a, { onChange, onRandomize }) {
 // ---------------------------------------------------------------------------
 
 // settings is edited in place. onChange() saves; onModeChange(), onRandomize()
-// and onGenerate() ask the app to re-render or move on.
-export function renderSettings({ settings, error, onChange, onModeChange, onRandomize, onGenerate }) {
+// and onGenerate() ask the app to re-render or move on. `sound` is { isOn(), setOn(v) }:
+// the audio preference lives outside the workout settings.
+export function renderSettings({ settings, sound, error, onChange, onModeChange, onRandomize, onGenerate }) {
   const mode = segmented({
     label: "Workout type",
     options: [{ value: "quick", label: "Quick Start" }, { value: "advanced", label: "Advanced" }],
@@ -172,6 +173,14 @@ export function renderSettings({ settings, error, onChange, onModeChange, onRand
   const panel = settings.mode === "quick"
     ? quickPanel(settings.quick, onChange)
     : advancedPanel(settings.advanced, { onChange, onRandomize });
+
+  panel.append(switchRow({
+    label: "Sound",
+    hint: "Beeps during the workout.",
+    get: () => sound.isOn(),
+    set: (v) => sound.setOn(v),
+    onToggle: () => {},
+  }));
 
   return h("main", { class: "screen" },
     h("header", { class: "top" }, h("h1", {}, "Core Roulette"), mode),
