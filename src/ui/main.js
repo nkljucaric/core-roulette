@@ -2,7 +2,9 @@
 // src/generator.js and src/settings.js; this file only wires them to the screens.
 
 import { h } from "./dom.js";
-import { loadStoredSettings, saveStoredSettings } from "./storage.js";
+import { loadStoredSettings, saveStoredSettings, loadStoredAudioPrefs, saveStoredAudioPrefs } from "./storage.js";
+import * as audio from "./audio.js";
+import { cuesFor, sanitizeAudioPrefs } from "../cues.js";
 import { renderSettings } from "./settings-view.js";
 import { renderPreview } from "./preview-view.js";
 import { renderRunner } from "./runner-view.js";
@@ -15,6 +17,7 @@ const root = document.getElementById("app");
 const state = {
   library: null,
   settings: sanitize(loadStoredSettings()),
+  audioPrefs: sanitizeAudioPrefs(loadStoredAudioPrefs()),
   workout: null,
   error: null,
   runner: null,
@@ -31,6 +34,15 @@ function show(el) {
 function save() {
   saveStoredSettings(state.settings);
 }
+
+// Sound on/off, shared by the settings screen and the paused screen.
+const sound = {
+  isOn: () => !state.audioPrefs.muted,
+  setOn: (on) => {
+    state.audioPrefs = { ...state.audioPrefs, muted: !on };
+    saveStoredAudioPrefs(state.audioPrefs);
+  },
+};
 
 // Always built from the user's settings, never from a previous workout's
 // resolved options, so unset values (Quick Start) re-randomize on every call.
@@ -51,6 +63,7 @@ function generate() {
 function showSettings() {
   show(renderSettings({
     settings: state.settings,
+    sound,
     error: state.error,
     onChange: save,
     onModeChange: () => { state.error = null; showSettings(); },
@@ -73,16 +86,28 @@ function showPreview() {
   }));
 }
 
-// Hooks for audio (#11) and wake lock (#13) attach here. Anything that needs a
-// user gesture (unlocking the AudioContext) must run synchronously in the Start
-// tap, which is why showRunner is called straight from the click handler.
-const runnerHooks = {};
+// Beeps (#11). src/cues.js decides which sound a tick's events earn; audio.js
+// plays it. Wake lock (#13) will attach to these hooks too.
+const runnerHooks = {
+  onEvents(events, view) {
+    const { sound: id } = cuesFor(events, { positionSec: view.positionSec, prefs: state.audioPrefs });
+    if (id) audio.play(id);
+  },
+  onResume() {
+    audio.resume(); // the Resume tap is a gesture, so iOS lets a suspended context restart
+  },
+};
 
 function showRunner() {
+  // Audio may only start inside a tap, and showRunner runs synchronously from
+  // the Start tap, so the context is unlocked here and the start chirp confirms it.
+  audio.unlock();
+  if (!state.audioPrefs.muted) audio.play("chirp");
   const runner = renderRunner({
     workout: state.workout,
     library: state.library,
     hooks: runnerHooks,
+    sound,
     onDone: showDone,
     onExit: showPreview,
   });

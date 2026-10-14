@@ -19,3 +19,22 @@ export function saveStoredSettings(settings) {
     // Not saving is fine; the app works without it.
   }
 }
+
+const AUDIO_KEY = "core-roulette.audio.v1";
+
+export function loadStoredAudioPrefs() {
+  try {
+    const raw = localStorage.getItem(AUDIO_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredAudioPrefs(prefs) {
+  try {
+    localStorage.setItem(AUDIO_KEY, JSON.stringify(prefs));
+  } catch {
+    // Not saving is fine; the app works without it.
+  }
+}

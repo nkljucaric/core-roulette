@@ -150,6 +150,7 @@ const E = {
   swap: (at, slotIndex) => ({ type: "side-swap", at, slotIndex, side: "right" }),
   rest: (at, slotIndex) => ({ type: "rest-start", at, slotIndex, nextSlotIndex: slotIndex + 1 }),
   cd: (at, n, phase, slotIndex) => ({ type: "countdown", at, n, phase, slotIndex }),
+  warn: (at, slotIndex) => ({ type: "warning", at, n: 10, phase: "work", slotIndex }),
   done: (at, slotIndex) => ({ type: "done", at, slotIndex }),
 };
 
@@ -315,6 +316,7 @@ test("view: at the very start of the lead-in shows ready with the full lead-in a
     phaseDurationSec: 5,
     totalRemainingSec: 50,
     elapsedSec: 0,
+    positionSec: -5,
     next: f.slots[0],
     nextIsSideSwap: false,
   });
@@ -351,6 +353,7 @@ test("view: at exactly workout time 0 the first move starts (half-open boundary)
     phaseDurationSec: 10,
     totalRemainingSec: 50,
     elapsedSec: 0,
+    positionSec: 0,
     next: f.slots[1],
     nextIsSideSwap: false,
   });
@@ -380,6 +383,7 @@ test("view: the instant a work phase ends the rest phase applies, for the move j
     phaseDurationSec: 5,
     totalRemainingSec: 40,
     elapsedSec: 10,
+    positionSec: 10,
     next: f.slots[1],
     nextIsSideSwap: false,
   });
@@ -406,6 +410,7 @@ test("view: at the end of rest the next move starts, as the left side, and flags
     phaseDurationSec: 10,
     totalRemainingSec: 35,
     elapsedSec: 15,
+    positionSec: 15,
     next: f.slots[2],
     nextIsSideSwap: true,
   });
@@ -434,6 +439,7 @@ test("view: at the side swap the right side starts straight away with no rest, a
     phaseDurationSec: 10,
     totalRemainingSec: 25,
     elapsedSec: 25,
+    positionSec: 25,
     next: f.slots[3],
     nextIsSideSwap: false,
   });
@@ -452,6 +458,7 @@ test("view: resting after the right side reports that side and a next move that 
     phaseDurationSec: 5,
     totalRemainingSec: 15,
     elapsedSec: 35,
+    positionSec: 35,
     next: f.slots[3],
     nextIsSideSwap: false,
   });
@@ -470,6 +477,7 @@ test("view: the last slot has next null and nextIsSideSwap false", () => {
     phaseDurationSec: 10,
     totalRemainingSec: 10,
     elapsedSec: 40,
+    positionSec: 40,
     next: null,
     nextIsSideSwap: false,
   });
@@ -496,6 +504,7 @@ test("view: at exactly the duration the workout is done with everything zeroed",
     phaseDurationSec: 0,
     totalRemainingSec: 0,
     elapsedSec: 50,
+    positionSec: 50,
     next: null,
     nextIsSideSwap: false,
   });
@@ -1570,5 +1579,329 @@ test("real two-sided warm-up: the plan lasts the full workout duration and shows
     const plan = buildPlan(workout);
     assert.equal(plan.durationSec, 600, `seed ${seed}`);
     assert.equal(viewAt(plan, 0).totalRemainingSec, 600);
+  }
+});
+
+// ===========================================================================
+// Warning event: "10 seconds left" in a work interval
+// ===========================================================================
+
+// Work intervals longer than 10 s, so every work segment gets a warning except
+// the last one (exactly 10 s). Default 5 s lead-in. Timeline:
+//   ready [-5,0)  work0 [0,15)  rest [15,20)  work1(left) [20,32)
+//   work2(right) [32,43)  rest [43,48)  work3 [48,58)                 duration 58
+const longFixture = () =>
+  makeWorkout([
+    ["a", null, 15, 5],
+    ["b", "left", 12, 0],
+    ["b", "right", 11, 5],
+    ["c", null, 10, 0],
+  ]);
+
+const expectedLongFixtureEvents = () => [
+  E.ready(-5, 0),
+  E.cd(-3, 3, "ready", null),
+  E.cd(-2, 2, "ready", null),
+  E.cd(-1, 1, "ready", null),
+  E.work(0, 0),
+  E.warn(5, 0),
+  E.cd(12, 3, "work", 0),
+  E.cd(13, 2, "work", 0),
+  E.cd(14, 1, "work", 0),
+  E.rest(15, 0),
+  E.cd(17, 3, "rest", 0),
+  E.cd(18, 2, "rest", 0),
+  E.cd(19, 1, "rest", 0),
+  E.work(20, 1, "left"),
+  E.warn(22, 1),
+  E.cd(29, 3, "work", 1),
+  E.cd(30, 2, "work", 1),
+  E.cd(31, 1, "work", 1),
+  E.swap(32, 2),
+  E.warn(33, 2),
+  E.cd(40, 3, "work", 2),
+  E.cd(41, 2, "work", 2),
+  E.cd(42, 1, "work", 2),
+  E.rest(43, 2),
+  E.cd(45, 3, "rest", 2),
+  E.cd(46, 2, "rest", 2),
+  E.cd(47, 1, "rest", 2),
+  E.work(48, 3),
+  E.cd(55, 3, "work", 3),
+  E.cd(56, 2, "work", 3),
+  E.cd(57, 1, "work", 3),
+  E.done(58, 3),
+];
+
+test("warning: every work segment longer than 10 s gets one warning 10 s before it ends, and the exact ordered list is right", () => {
+  const plan = buildPlan(longFixture());
+  assert.deepEqual(norm(fullEvents(plan)), expectedLongFixtureEvents());
+});
+
+test("warning: the event carries type, at, n 10, phase work and the slot index", () => {
+  const plan = buildPlan(longFixture());
+  const w = fullEvents(plan).filter((e) => e.type === "warning");
+  assert.deepEqual(norm(w), [E.warn(5, 0), E.warn(22, 1), E.warn(33, 2)]);
+});
+
+test("warning: a work interval of exactly 10 s gets none (it would fire on the work start)", () => {
+  const plan = buildPlan(longFixture());
+  assert.ok(!fullEvents(plan).some((e) => e.type === "warning" && e.slotIndex === 3));
+  // And the existing 10 s fixture has no warnings at all.
+  assert.ok(!fullEvents(buildPlan(fixture())).some((e) => e.type === "warning"));
+});
+
+test("warning: work intervals of 9 and 10 s get none and 11 s gets one a second after the start", () => {
+  const plan = buildPlan(
+    makeWorkout([
+      ["a", null, 9, 5],
+      ["b", null, 10, 5],
+      ["c", null, 11, 0],
+    ]),
+    { leadInSec: 0 }
+  );
+  const w = fullEvents(plan).filter((e) => e.type === "warning");
+  assert.deepEqual(norm(w), [E.warn(30, 2)]); // c runs [29,40)
+});
+
+test("warning: never emitted for a long rest or a long lead-in", () => {
+  const plan = buildPlan(
+    makeWorkout([
+      ["a", null, 12, 15],
+      ["b", null, 10, 0],
+    ]),
+    { leadInSec: 15 }
+  );
+  const w = fullEvents(plan).filter((e) => e.type === "warning");
+  assert.deepEqual(norm(w), [E.warn(2, 0)]);
+  assert.ok(w.every((e) => e.phase === "work"));
+});
+
+test("warning: warm-up alternate slots longer than 10 s get a warning like any other work interval", () => {
+  const workout = makeWarmWorkout(
+    [
+      ["bird-dog", "alternate", 20, 5],
+      ["dead-bug", null, 20, 0],
+    ],
+    1
+  );
+  const w = fullEvents(buildPlan(workout)).filter((e) => e.type === "warning");
+  assert.deepEqual(norm(w), [E.warn(10, 0), E.warn(35, 1)]);
+});
+
+test("warning: a tick reports it once, in order, between the surrounding events", () => {
+  const plan = buildPlan(longFixture());
+  const a = tick(plan, start(plan, T0), msAt(plan, 4.9));
+  assert.ok(!a.events.some((e) => e.type === "warning"));
+  const b = tick(plan, a.state, msAt(plan, 5));
+  assert.deepEqual(norm(b.events), [E.warn(5, 0)]);
+  const c = tick(plan, b.state, msAt(plan, 12));
+  assert.deepEqual(norm(c.events), [E.cd(12, 3, "work", 0)]);
+});
+
+test("warning: eventsBetween includes it like any other event", () => {
+  const plan = buildPlan(longFixture());
+  assert.deepEqual(norm(eventsBetween(plan, 4, 6)), [E.warn(5, 0)]);
+  assert.deepEqual(norm(eventsBetween(plan, 21, 23)), [E.warn(22, 1)]);
+});
+
+test("warning: the shown phase countdown reads 10 when the warning fires", () => {
+  const plan = buildPlan(longFixture());
+  const warnings = fullEvents(plan).filter((x) => x.type === "warning");
+  assert.equal(warnings.length, 3);
+  for (const e of warnings) {
+    const v = viewAt(plan, e.at);
+    assert.equal(v.phase, "work");
+    assert.equal(v.slotIndex, e.slotIndex);
+    assert.equal(v.phaseRemainingSec, 10);
+  }
+});
+
+test("warning: throttling invariance, every cadence delivers the exact long-fixture list once", () => {
+  const plan = buildPlan(longFixture());
+  for (const step of [50, 100, 1000, 7000]) {
+    assertSameAsReference(plan, runTicks(plan, everyMs(plan, step)).events, `step ${step}`);
+    assert.deepEqual(norm(runTicks(plan, everyMs(plan, step)).events), expectedLongFixtureEvents(), `step ${step}`);
+  }
+  assert.deepEqual(norm(runTicks(plan, [farMs(plan)]).events), expectedLongFixtureEvents());
+  for (let seed = 1; seed <= 25; seed++) {
+    assertSameAsReference(plan, runTicks(plan, randomJumps(plan, seed)).events, `seed ${seed}`);
+  }
+});
+
+test("warning: a throttled page still gets the missed warning on its next tick", () => {
+  const plan = buildPlan(longFixture());
+  const a = tick(plan, start(plan, T0), msAt(plan, 2));
+  const b = tick(plan, a.state, msAt(plan, 8)); // 6 s gap straddles the warning at 5
+  assert.deepEqual(norm(b.events), [E.warn(5, 0)]);
+});
+
+test("warning: events are not duplicated or lost across a pause and resume that straddles one", () => {
+  const plan = buildPlan(longFixture());
+  const out = [];
+  let r = tick(plan, start(plan, T0), msAt(plan, 4)); // just before the warning at 5
+  out.push(...r.events);
+  const s = pause(r.state, msAt(plan, 4));
+  r = tick(plan, s, msAt(plan, 4) + 90_000);
+  out.push(...r.events);
+  const resumedAt = msAt(plan, 4) + 120_000;
+  r = tick(plan, resume(r.state, resumedAt), resumedAt + 1000); // workout 5.0: warning fires now
+  out.push(...r.events);
+  assert.deepEqual(norm(r.events), [E.warn(5, 0)]);
+  r = tick(plan, r.state, resumedAt + 3_600_000);
+  out.push(...r.events);
+  assertSameAsReference(plan, out, "across a pause");
+  assert.deepEqual(norm(out), expectedLongFixtureEvents());
+});
+
+test("warning: pause/resume cycles with a warning in play keep the event stream intact", () => {
+  const plan = buildPlan(longFixture());
+  for (let seed = 1; seed <= 20; seed++) {
+    const rng = mulberry32(seed);
+    let now = T0;
+    let r = { state: start(plan, T0), events: [] };
+    const all = [];
+    for (let i = 0; i < 8; i++) {
+      now += 500 + Math.floor(rng() * 9000);
+      r = tick(plan, r.state, now);
+      all.push(...r.events);
+      const paused = pause(r.state, now);
+      now += 1000 + Math.floor(rng() * 60_000);
+      r = tick(plan, paused, now);
+      all.push(...r.events);
+      r = { state: resume(r.state, now), events: [] };
+    }
+    r = tick(plan, r.state, now + 3_600_000);
+    all.push(...r.events);
+    assertSameAsReference(plan, all, `seed ${seed}`);
+    assert.equal(all.filter((e) => e.type === "warning").length, 3, `seed ${seed}`);
+  }
+});
+
+test("real workouts: warning events are exactly one per work slot longer than 10 s, at endSec - 10", () => {
+  for (const { label, workout } of realWorkouts()) {
+    const warnings = fullEvents(buildPlan(workout)).filter((e) => e.type === "warning");
+    const expected = workout.slots
+      .filter((s) => s.endSec - s.startSec > 10)
+      .map((s) => E.warn(s.endSec - 10, s.index));
+    assert.deepEqual(norm(warnings), expected, label);
+  }
+});
+
+test("real workouts: a warning always lies strictly inside its work interval and the list stays time-ordered", () => {
+  for (const { label, workout } of realWorkouts()) {
+    const events = fullEvents(buildPlan(workout));
+    const warnings = events.filter((x) => x.type === "warning");
+    assert.ok(warnings.length > 0, `${label}: expected warnings`);
+    for (const e of warnings) {
+      const slot = workout.slots[e.slotIndex];
+      assert.ok(e.at > slot.startSec && e.at < slot.endSec, label);
+    }
+    const ats = events.map((e) => e.at);
+    assert.deepEqual(ats, [...ats].sort((a, b) => a - b), label);
+  }
+});
+
+test("real workouts: events including warnings are delivered exactly once at every cadence", () => {
+  for (const { label, workout } of realWorkouts(3)) {
+    const plan = buildPlan(workout);
+    assert.ok(fullEvents(plan).some((e) => e.type === "warning"), `${label}: expected warnings in this run`);
+    for (const step of [100, 1000, 7000]) {
+      assertSameAsReference(plan, runTicks(plan, everyMs(plan, step)).events, `${label} step ${step}`);
+    }
+    assertSameAsReference(plan, runTicks(plan, randomJumps(plan, 5)).events, `${label} jumps`);
+  }
+});
+
+// ===========================================================================
+// view.positionSec: signed workout time, negative during the lead-in
+// ===========================================================================
+
+test("positionSec: the very start of the lead-in is -leadInSec", () => {
+  const plan = buildPlan(fixture());
+  assert.equal(viewAt(plan, -5).positionSec, -5);
+});
+
+test("positionSec: it is negative during the lead-in, while elapsedSec stays 0", () => {
+  const plan = buildPlan(fixture());
+  const v = viewAt(plan, -3.5);
+  assert.equal(v.positionSec, -3.5);
+  assert.equal(v.elapsedSec, 0);
+  const late = viewAt(plan, -0.5);
+  assert.equal(late.positionSec, -0.5);
+  assert.equal(late.elapsedSec, 0);
+});
+
+test("positionSec: the lead-in length follows leadInSec", () => {
+  const plan = buildPlan(fixture(), { leadInSec: 3 });
+  assert.equal(tick(plan, start(plan, T0), T0).view.positionSec, -3);
+  assert.equal(tick(plan, start(plan, T0), T0 + 1000).view.positionSec, -2);
+});
+
+test("positionSec: it is 0 at the first move and equals elapsedSec from then on", () => {
+  const plan = buildPlan(fixture());
+  for (const sec of [0, 0.001, 3.5, 12.25, 25, 49.999]) {
+    const v = viewAt(plan, sec);
+    assert.equal(v.positionSec, sec, `at ${sec}`);
+    assert.equal(v.positionSec, v.elapsedSec, `at ${sec}`);
+  }
+});
+
+test("positionSec: with no lead-in the run starts at 0", () => {
+  const plan = buildPlan(fixture(), { leadInSec: 0 });
+  assert.equal(tick(plan, start(plan, T0), T0).view.positionSec, 0);
+});
+
+test("positionSec: a nowMs before the start is the start of the lead-in, not lower", () => {
+  const plan = buildPlan(fixture());
+  assert.equal(tick(plan, start(plan, T0), T0 - 20_000).view.positionSec, -5);
+});
+
+test("positionSec: the done view reports durationSec, and so does a tick long after the end", () => {
+  const plan = buildPlan(fixture());
+  assert.equal(viewAt(plan, 50).positionSec, 50);
+  assert.equal(viewAt(plan, 500).positionSec, 50);
+  assert.equal(tick(plan, start(plan, T0), farMs(plan)).view.positionSec, 50);
+});
+
+test("positionSec: it is frozen while paused, during the lead-in and during the workout", () => {
+  const plan = buildPlan(fixture());
+  const inLeadIn = tick(plan, pause(start(plan, T0), msAt(plan, -3)), msAt(plan, -3) + 99_000).view;
+  assert.equal(inLeadIn.status, "paused");
+  assert.equal(inLeadIn.positionSec, -3);
+  const inWork = tick(plan, pause(start(plan, T0), msAt(plan, 12.5)), msAt(plan, 40)).view;
+  assert.equal(inWork.positionSec, 12.5);
+});
+
+test("positionSec: resuming continues from the frozen point", () => {
+  const plan = buildPlan(fixture());
+  const paused = pause(start(plan, T0), msAt(plan, 3));
+  const resumedAt = msAt(plan, 3) + 45_000;
+  assert.equal(tick(plan, resume(paused, resumedAt), resumedAt).view.positionSec, 3);
+  assert.equal(tick(plan, resume(paused, resumedAt), resumedAt + 2500).view.positionSec, 5.5);
+});
+
+test("positionSec: it never decreases across a sweep, and ends at durationSec", () => {
+  const plan = buildPlan(fixture());
+  let prev = -Infinity;
+  for (const ms of sweepPoints(plan)) {
+    const v = tick(plan, start(plan, T0), T0 + ms).view;
+    assert.ok(Number.isFinite(v.positionSec));
+    assert.ok(v.positionSec >= prev, `+${ms}ms`);
+    assert.ok(v.positionSec >= -plan.leadInSec && v.positionSec <= plan.durationSec, `+${ms}ms`);
+    prev = v.positionSec;
+  }
+  assert.equal(prev, plan.durationSec);
+});
+
+test("positionSec: the position of a tick is at or after every event that tick reports", () => {
+  const plan = buildPlan(longFixture());
+  for (const step of [100, 1000, 7000]) {
+    let state = start(plan, T0);
+    for (const now of everyMs(plan, step)) {
+      const r = tick(plan, state, now);
+      state = r.state;
+      for (const e of r.events) assert.ok(e.at <= r.view.positionSec, `step ${step}: ${e.type} at ${e.at}`);
+    }
   }
 });

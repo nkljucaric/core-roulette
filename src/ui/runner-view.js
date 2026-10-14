@@ -6,6 +6,7 @@
 //   onEvents(events, view)  timer events from each tick (beeps, #11)
 //   onPause() / onResume()  wake lock, audio (#11, #13)
 //   onFinish(reason)        "done" or "exited"
+// `sound` is { isOn(), setOn(v) }; the paused screen shows its toggle.
 //
 // renderRunner returns { el, destroy }. The caller must call destroy() before
 // swapping the screen away, which clears the interval and the listener.
@@ -16,7 +17,7 @@ import { describeRunner } from "../runner.js";
 
 const TICK_MS = 100;
 
-export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now = () => Date.now() }) {
+export function renderRunner({ workout, library, hooks = {}, sound, onDone, onExit, now = () => Date.now() }) {
   const plan = buildPlan(workout);
   let state = start(plan, now());
   let timerId = null;
@@ -41,6 +42,14 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
 
   const resumeBtn = h("button", { type: "button", class: "btn primary", onClick: doResume }, "Resume");
   const endBtn = h("button", { type: "button", class: "btn secondary", onClick: () => { confirming = true; renderOverlay(); } }, "End workout");
+  const soundBtn = h("button", { type: "button", class: "btn secondary", role: "switch", onClick: () => {
+    sound.setOn(!sound.isOn());
+    renderSound();
+  } });
+  function renderSound() {
+    soundBtn.setAttribute("aria-checked", String(sound.isOn()));
+    soundBtn.textContent = sound.isOn() ? "Sound: on" : "Sound: off";
+  }
   const confirmText = h("p", { class: "r-confirm-text" }, "End this workout?");
   const yesBtn = h("button", { type: "button", class: "btn primary", onClick: doExit }, "Yes, end it");
   const keepBtn = h("button", { type: "button", class: "btn secondary", onClick: () => { confirming = false; renderOverlay(); } }, "Keep going");
@@ -90,8 +99,9 @@ export function renderRunner({ workout, library, hooks = {}, onDone, onExit, now
   }
 
   function renderOverlay() {
+    if (sound) renderSound();
     overlayBody.replaceChildren(
-      ...(confirming ? [confirmText, yesBtn, keepBtn] : [resumeBtn, endBtn])
+      ...(confirming ? [confirmText, yesBtn, keepBtn] : [resumeBtn, ...(sound ? [soundBtn] : []), endBtn])
     );
   }
 
